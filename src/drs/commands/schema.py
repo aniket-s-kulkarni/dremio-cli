@@ -63,13 +63,19 @@ async def wiki(client: DremioClient, path: str) -> dict:
     try:
         wiki_data = await client.get_wiki(entity_id)
         wiki_text = wiki_data.get("text", "")
-    except httpx.HTTPStatusError:
-        pass  # 404 is expected when no wiki exists
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            pass  # no wiki exists for this entity
+        else:
+            raise handle_api_error(exc) from exc
     try:
         tags_data = await client.get_tags(entity_id)
         tags_list = tags_data.get("tags", [])
-    except httpx.HTTPStatusError:
-        pass  # 404 is expected when no tags exist
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            pass  # no tags exist for this entity
+        else:
+            raise handle_api_error(exc) from exc
 
     return {
         "path": path,
@@ -105,6 +111,9 @@ def _run_command(coro, client, fmt: OutputFormat = OutputFormat.json, fields: st
     except Exception as exc:
         from drs.utils import DremioAPIError
         if isinstance(exc, DremioAPIError):
+            error(str(exc))
+            raise typer.Exit(1)
+        if isinstance(exc, ValueError):
             error(str(exc))
             raise typer.Exit(1)
         raise

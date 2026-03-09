@@ -202,6 +202,7 @@ COMMAND_SCHEMAS: dict[str, dict] = {
         "parameters": [
             {"name": "job_id", "type": "string", "required": True, "positional": True, "format": "uuid", "description": "Job ID (UUID)"},
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "flag": "--fields/-f", "description": "Comma-separated fields to include in output"},
         ],
     },
     "jobs.profile": {

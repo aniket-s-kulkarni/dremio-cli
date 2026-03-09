@@ -96,6 +96,9 @@ def _run_command(coro, client, fmt: OutputFormat = OutputFormat.json, fields: st
         if isinstance(exc, DremioAPIError):
             error(str(exc))
             raise typer.Exit(1)
+        if isinstance(exc, ValueError):
+            error(str(exc))
+            raise typer.Exit(1)
         raise
     output(result, fmt, fields=fields)
 
