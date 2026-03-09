@@ -48,7 +48,7 @@ DRS_COVERAGE = {
 
     # Users & Roles (v1)
     "list_users":        ("GET", "/v1/users"),
-    "get_user_by_name":  ("GET", "/v1/user/by-name/{name}"),
+    "get_user_by_name":  ("GET", "/v1/users/name/{userName}"),
     "list_roles":        ("GET", "/v1/roles"),
     "get_grants":        ("GET", "/v1/{scope}/{scopeId}/grants/{type}/{id}"),
 }

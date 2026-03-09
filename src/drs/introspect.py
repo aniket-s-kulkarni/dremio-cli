@@ -248,7 +248,7 @@ COMMAND_SCHEMAS: dict[str, dict] = {
         "command": "audit",
         "description": "Audit a user's roles and effective permissions by username.",
         "mechanism": "REST",
-        "endpoints": ["GET /v1/user/by-name/{name}"],
+        "endpoints": ["GET /v1/users/name/{userName}"],
         "parameters": [
             {"name": "username", "type": "string", "required": True, "positional": True, "description": "Username to audit"},
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},

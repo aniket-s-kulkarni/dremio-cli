@@ -30,7 +30,10 @@ async def run_query(client: DremioClient, sql: str, context: list[str] | None = 
 
     interval = POLL_INTERVAL
     while True:
-        status = await client.get_job_status(job_id)
+        try:
+            status = await client.get_job_status(job_id)
+        except httpx.HTTPStatusError as exc:
+            raise handle_api_error(exc) from exc
         state = status.get("jobState", status.get("state", "UNKNOWN"))
         if state in TERMINAL_STATES:
             break
@@ -45,7 +48,10 @@ async def run_query(client: DremioClient, sql: str, context: list[str] | None = 
     offset = 0
     limit = 500
     while offset < row_count:
-        page = await client.get_job_results(job_id, limit=limit, offset=offset)
+        try:
+            page = await client.get_job_results(job_id, limit=limit, offset=offset)
+        except httpx.HTTPStatusError as exc:
+            raise handle_api_error(exc) from exc
         columns = page.get("columns", [])
         col_names = [c.get("name", f"col_{i}") for i, c in enumerate(columns)]
         for raw_row in page.get("rows", []):

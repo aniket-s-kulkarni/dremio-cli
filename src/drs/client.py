@@ -130,7 +130,7 @@ class DremioClient:
         return await self._get(self._v1("/users"), params={"maxResults": max_results})
 
     async def get_user_by_name(self, name: str) -> dict:
-        return await self._get(self._v1(f"/user/by-name/{name}"))
+        return await self._get(self._v1(f"/users/name/{name}"))
 
     async def list_roles(self, max_results: int = 100) -> dict:
         return await self._get(self._v1("/roles"), params={"maxResults": max_results})
