@@ -26,10 +26,10 @@ class TestURLBuilders:
         assert client._v0("/job/abc") == "https://api.dremio.cloud/v0/projects/proj-123/job/abc"
 
     def test_v3_url(self, client: DremioClient) -> None:
-        assert client._v3("/catalog/123") == "https://api.dremio.cloud/api/v3/catalog/123"
+        assert client._v3("/catalog/123") == "https://api.dremio.cloud/api/v3/projects/proj-123/catalog/123"
 
     def test_v3_search_url(self, client: DremioClient) -> None:
-        assert client._v3("/search") == "https://api.dremio.cloud/api/v3/search"
+        assert client._v3("/search") == "https://api.dremio.cloud/api/v3/projects/proj-123/search"
 
     def test_v1_url(self, client: DremioClient) -> None:
         assert client._v1("/users") == "https://api.dremio.cloud/v1/users"
@@ -50,10 +50,10 @@ class TestCatalogURL:
         """Catalog list with empty entity_id should not produce trailing slash."""
         path = "/catalog" if not "" else f"/catalog/{''}"
         # Verify the client method builds the right path
-        assert client._v3("/catalog") == "https://api.dremio.cloud/api/v3/catalog"
+        assert client._v3("/catalog") == "https://api.dremio.cloud/api/v3/projects/proj-123/catalog"
 
     def test_catalog_entity_with_id(self, client: DremioClient) -> None:
-        assert client._v3("/catalog/abc-123") == "https://api.dremio.cloud/api/v3/catalog/abc-123"
+        assert client._v3("/catalog/abc-123") == "https://api.dremio.cloud/api/v3/projects/proj-123/catalog/abc-123"
 
 
 class TestClientHeaders:

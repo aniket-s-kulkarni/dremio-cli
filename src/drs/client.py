@@ -35,7 +35,7 @@ class DremioClient:
         return f"{self.config.uri}/v0/projects/{self.config.project_id}{path}"
 
     def _v3(self, path: str) -> str:
-        return f"{self.config.uri}/api/v3{path}"
+        return f"{self.config.uri}/api/v3/projects/{self.config.project_id}{path}"
 
     def _v1(self, path: str) -> str:
         return f"{self.config.uri}/v1{path}"
