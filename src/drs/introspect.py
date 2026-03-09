@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Runtime schema introspection for drs commands.
 
 Provides machine-readable descriptions of command parameters, types, and

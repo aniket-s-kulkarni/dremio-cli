@@ -43,7 +43,36 @@ uv sync
 
 ### 2. Configure
 
-Create a config file:
+There are three ways to authenticate, in order of priority:
+
+**Option A: CLI flags** (highest priority — override everything)
+
+```bash
+# Token auth (PAT or session token)
+drs --token YOUR_TOKEN --project-id YOUR_PROJECT_ID query run "SELECT 1"
+
+# Username/password auth (logs in automatically)
+drs --user admin --password secret --project-id YOUR_PROJECT_ID query run "SELECT 1"
+
+# EU region
+drs --uri https://api.eu.dremio.cloud --token YOUR_TOKEN --project-id YOUR_PROJECT_ID query run "SELECT 1"
+```
+
+**Option B: Environment variables**
+
+```bash
+# Token auth
+export DREMIO_TOKEN=dremio_pat_xxxxxxxxxxxxx
+export DREMIO_PROJECT_ID=your-project-id
+# export DREMIO_URI=https://api.eu.dremio.cloud  # optional, for EU region
+
+# Or username/password auth
+export DREMIO_USER=your-username
+export DREMIO_PASSWORD=your-password
+export DREMIO_PROJECT_ID=your-project-id
+```
+
+**Option C: Config file** (lowest priority)
 
 ```bash
 mkdir -p ~/.config/dremioai
@@ -53,13 +82,6 @@ project_id: your-project-id
 # uri: https://api.dremio.cloud  # default; change for EU region
 EOF
 chmod 600 ~/.config/dremioai/config.yaml
-```
-
-Or use environment variables (these take priority over the config file):
-
-```bash
-export DREMIO_PAT=dremio_pat_xxxxxxxxxxxxx
-export DREMIO_PROJECT_ID=your-project-id
 ```
 
 **Where to find these values:**
@@ -184,22 +206,26 @@ Commands that query system tables (`jobs list`, `jobs profile`, `reflect list`, 
 
 ## Configuration reference
 
-`drs` looks for configuration in this order (first match wins per field):
+`drs` resolves each setting using the first match (highest priority first):
 
-| Source | PAT | Project ID | API URI |
-|--------|-----|------------|---------|
-| Env: `DREMIO_PAT` | Yes | | |
-| Env: `DREMIO_PROJECT_ID` | | Yes | |
-| Env: `DREMIO_URI` | | | Yes |
-| File: `~/.config/dremioai/config.yaml` | `pat:` | `project_id:` | `uri:` |
-| Default | *(required)* | *(required)* | `https://api.dremio.cloud` |
+| Priority | Token | Project ID | API URI |
+|----------|-------|------------|---------|
+| CLI flag | `--token` | `--project-id` | `--uri` |
+| CLI flag | `--user` + `--password` (login) | | |
+| Env var | `DREMIO_TOKEN` | `DREMIO_PROJECT_ID` | `DREMIO_URI` |
+| Env var | `DREMIO_PAT` *(legacy)* | | |
+| Env var | `DREMIO_USER` + `DREMIO_PASSWORD` (login) | | |
+| Config file | `pat:` / `token:` | `project_id:` / `projectId:` | `uri:` / `endpoint:` |
+| Default | *(required)* | *(required for DC)* | `https://api.dremio.cloud` |
 
 The config file also accepts the legacy `dremio-mcp` format (`token`, `projectId`, `endpoint`) for backwards compatibility.
 
-You can also specify a custom config file path:
-
 ```bash
+# Custom config file
 drs --config /path/to/my/config.yaml query run "SELECT 1"
+
+# EU region
+drs --uri https://api.eu.dremio.cloud query run "SELECT 1"
 ```
 
 ## Claude Code Plugin

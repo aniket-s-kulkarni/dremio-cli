@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Tests for the DremioClient URL construction and method routing."""
 
 from __future__ import annotations

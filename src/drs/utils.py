@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Shared utilities for drs — path parsing, input validation, error handling."""
 
 from __future__ import annotations

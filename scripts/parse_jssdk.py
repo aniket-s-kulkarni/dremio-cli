@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Parse dremio/js-sdk TypeScript source to extract API endpoints.
 
 Generates api_registry.json — a machine-readable map of every Dremio API

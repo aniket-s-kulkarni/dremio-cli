@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """REST client for Dremio Cloud API — the single HTTP layer."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """drs reflect — manage Dremio reflections (materialized views)."""
 
 from __future__ import annotations

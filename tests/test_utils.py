@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Tests for shared utilities — path parsing, validation, error handling, filtering."""
 
 from __future__ import annotations

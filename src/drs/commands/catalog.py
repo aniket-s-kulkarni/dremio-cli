@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """drs catalog — browse and search the Dremio catalog."""
 
 from __future__ import annotations

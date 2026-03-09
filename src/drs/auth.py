@@ -1,10 +1,15 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Configuration and authentication for Dremio Cloud."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Any
 
+import httpx
 import yaml
 from pydantic import BaseModel
 
@@ -19,9 +24,38 @@ class DrsConfig(BaseModel):
     project_id: str
 
 
-def load_config(config_path: Path | None = None) -> DrsConfig:
-    """Load config with resolution order: env vars > config file > defaults."""
-    file_values: dict = {}
+def _login(uri: str, user: str, password: str) -> str:
+    """Exchange username + password for a session token via Dremio login API."""
+    resp = httpx.post(
+        f"{uri}/apiv2/login",
+        json={"userName": user, "password": password},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    token = resp.json().get("token")
+    if not token:
+        raise ValueError("Login succeeded but no token returned")
+    return token
+
+
+def load_config(
+    config_path: Path | None = None,
+    *,
+    cli_token: str | None = None,
+    cli_user: str | None = None,
+    cli_password: str | None = None,
+    cli_project_id: str | None = None,
+    cli_uri: str | None = None,
+) -> DrsConfig:
+    """Load config with resolution order: CLI args > env vars > config file > defaults.
+
+    Authentication priority:
+      1. --token (or DREMIO_TOKEN env)
+      2. --user + --password (or DREMIO_USER + DREMIO_PASSWORD env) → login for token
+      3. Config file pat/token field
+    """
+    # -- Config file (lowest priority) --
+    file_values: dict[str, Any] = {}
     path = config_path or DEFAULT_CONFIG_PATH
     if path.exists():
         with open(path) as f:
@@ -33,16 +67,35 @@ def load_config(config_path: Path | None = None) -> DrsConfig:
         }
         file_values = {k: v for k, v in file_values.items() if v is not None}
 
-    env_values: dict = {}
+    # -- Env vars (override file) --
+    env_values: dict[str, Any] = {}
     if v := os.environ.get("DREMIO_URI"):
         env_values["uri"] = v
-    if v := os.environ.get("DREMIO_PAT"):
+    if v := os.environ.get("DREMIO_TOKEN"):
+        env_values["pat"] = v
+    elif v := os.environ.get("DREMIO_PAT"):  # legacy compat
         env_values["pat"] = v
     if v := os.environ.get("DREMIO_PROJECT_ID"):
         env_values["project_id"] = v
 
-    merged = {"uri": DEFAULT_URI}
+    # -- Merge: defaults < file < env --
+    merged: dict[str, Any] = {"uri": DEFAULT_URI}
     merged.update(file_values)
     merged.update(env_values)
+
+    # -- CLI args (highest priority, override everything) --
+    if cli_uri:
+        merged["uri"] = cli_uri
+    if cli_project_id:
+        merged["project_id"] = cli_project_id
+    if cli_token:
+        merged["pat"] = cli_token
+
+    # -- User/password login (if no token resolved yet) --
+    if "pat" not in merged:
+        user = cli_user or os.environ.get("DREMIO_USER")
+        password = cli_password or os.environ.get("DREMIO_PASSWORD")
+        if user and password:
+            merged["pat"] = _login(merged.get("uri", DEFAULT_URI), user, password)
 
     return DrsConfig(**merged)

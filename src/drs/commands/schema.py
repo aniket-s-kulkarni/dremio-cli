@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """drs schema — describe tables, trace lineage, sample data."""
 
 from __future__ import annotations

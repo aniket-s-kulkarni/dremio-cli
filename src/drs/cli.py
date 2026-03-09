@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """drs — Developer CLI for Dremio Cloud. Entry point and command registration."""
 
 from __future__ import annotations
@@ -29,28 +32,47 @@ app.add_typer(access.app, name="access")
 
 # Global state for config
 _config: DrsConfig | None = None
-_config_path: Path | None = None
+_cli_opts: dict = {}
 
 
 @app.callback()
 def main(
     config: Optional[str] = typer.Option(None, "--config", "-c", help="Path to config file"),
+    token: Optional[str] = typer.Option(None, "--token", help="Dremio authentication token (PAT or session token)"),
+    user: Optional[str] = typer.Option(None, "--user", help="Dremio username (use with --password)"),
+    password: Optional[str] = typer.Option(None, "--password", help="Dremio password (use with --user)"),
+    project_id: Optional[str] = typer.Option(None, "--project-id", help="Dremio Cloud project ID"),
+    uri: Optional[str] = typer.Option(None, "--uri", help="Dremio API base URI (e.g., https://api.dremio.cloud, https://api.eu.dremio.cloud)"),
 ) -> None:
     """Global options for drs CLI."""
-    global _config_path
-    if config:
-        _config_path = Path(config)
+    global _cli_opts
+    _cli_opts = {
+        "config_path": Path(config) if config else None,
+        "cli_token": token,
+        "cli_user": user,
+        "cli_password": password,
+        "cli_project_id": project_id,
+        "cli_uri": uri,
+    }
 
 
 def get_config() -> DrsConfig:
     global _config
     if _config is None:
         try:
-            _config = load_config(_config_path)
+            _config = load_config(
+                _cli_opts.get("config_path"),
+                cli_token=_cli_opts.get("cli_token"),
+                cli_user=_cli_opts.get("cli_user"),
+                cli_password=_cli_opts.get("cli_password"),
+                cli_project_id=_cli_opts.get("cli_project_id"),
+                cli_uri=_cli_opts.get("cli_uri"),
+            )
         except Exception as e:
             print(f"Error loading config: {e}", file=sys.stderr)
             print(
-                "Set DREMIO_PAT and DREMIO_PROJECT_ID env vars, or create ~/.config/dremioai/config.yaml",
+                "Provide credentials via --token, --user/--password, "
+                "DREMIO_TOKEN env var, or config file (~/.config/dremioai/config.yaml)",
                 file=sys.stderr,
             )
             raise typer.Exit(1)

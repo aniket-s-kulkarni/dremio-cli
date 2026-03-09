@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Validate drs client.py coverage against Dremio OpenAPI specs.
 
 Parses the OpenAPI YAML specs from the Dremio monorepo and compares them

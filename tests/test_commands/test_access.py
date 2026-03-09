@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Tests for drs access commands — user lookup endpoint and audit."""
 
 from __future__ import annotations

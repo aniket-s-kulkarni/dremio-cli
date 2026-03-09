@@ -1,3 +1,6 @@
+#
+# Copyright (C) 2017-2019 Dremio Corporation. This file is confidential and private property.
+#
 """Output formatting for drs CLI — JSON, CSV, or pretty table."""
 
 from __future__ import annotations
