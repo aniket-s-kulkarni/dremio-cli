@@ -35,10 +35,6 @@ class DremioClient:
         """Project-scoped URL: /v0/projects/{pid}/..."""
         return f"{self.config.uri}/v0/projects/{self.config.project_id}{path}"
 
-    def _v0_api(self, path: str) -> str:
-        """Project-scoped URL with /api/ segment: /v0/api/projects/{pid}/..."""
-        return f"{self.config.uri}/v0/api/projects/{self.config.project_id}{path}"
-
     def _v3(self, path: str) -> str:
         """Alias for _v0 — Cloud serves catalog/reflection under the same project-scoped path."""
         return self._v0(path)
@@ -109,7 +105,7 @@ class DremioClient:
         body: dict[str, Any] = {"query": query}
         if filter_:
             body["filter"] = filter_
-        return await self._post(self._v0_api("/search"), json=body)
+        return await self._post(self._v0("/search"), json=body)
 
     async def get_lineage(self, entity_id: str) -> dict:
         return await self._get(self._v3(f"/catalog/{entity_id}/graph"))

@@ -78,7 +78,7 @@ COMMAND_SCHEMAS: dict[str, dict] = {
         "command": "search",
         "description": "Full-text search for tables, views, and sources by keyword.",
         "mechanism": "REST",
-        "endpoints": ["POST /v0/api/projects/{pid}/search"],
+        "endpoints": ["POST /v0/projects/{pid}/search"],
         "parameters": [
             {"name": "term", "type": "string", "required": True, "positional": True, "description": "Search term"},
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
@@ -136,7 +136,7 @@ COMMAND_SCHEMAS: dict[str, dict] = {
         "command": "list",
         "description": "List all reflections defined on a dataset.",
         "mechanism": "SQL",
-        "sql_template": "SELECT * FROM sys.reflections WHERE dataset_id = '{dataset_id}'",
+        "sql_template": "SELECT * FROM sys.project.\"reflections\" WHERE dataset_id = '{dataset_id}'",
         "parameters": [
             {"name": "path", "type": "string", "required": True, "positional": True, "description": "Dot-separated dataset path"},
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
@@ -206,7 +206,7 @@ COMMAND_SCHEMAS: dict[str, dict] = {
         "command": "profile",
         "description": "Get operator-level execution profile for a completed job.",
         "mechanism": "SQL",
-        "sql_template": "SELECT * FROM sys.project.job_profiles WHERE job_id = '{job_id}'",
+        "sql_template": "SELECT * FROM sys.project.\"job_profiles\" WHERE job_id = '{job_id}'",
         "parameters": [
             {"name": "job_id", "type": "string", "required": True, "positional": True, "format": "uuid", "description": "Job ID (UUID)"},
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},

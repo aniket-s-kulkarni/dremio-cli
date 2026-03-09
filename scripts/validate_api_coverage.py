@@ -36,7 +36,7 @@ DRS_COVERAGE = {
     # Catalog (v0 project-scoped)
     "get_catalog_entity":  ("GET",  "/v0/projects/{pid}/catalog/{id}"),
     "get_catalog_by_path": ("GET",  "/v0/projects/{pid}/catalog/by-path/{path}"),
-    "search":              ("POST", "/v0/api/projects/{pid}/search"),
+    "search":              ("POST", "/v0/projects/{pid}/search"),
     "get_lineage":         ("GET",  "/v0/projects/{pid}/catalog/{id}/graph"),
     "get_wiki":            ("GET",  "/v0/projects/{pid}/catalog/{id}/collaboration/wiki"),
     "get_tags":            ("GET",  "/v0/projects/{pid}/catalog/{id}/collaboration/tag"),

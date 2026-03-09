@@ -173,7 +173,7 @@ All endpoints target `https://api.dremio.cloud`. See the [Dremio Cloud API refer
 | `GET /v0/projects/{pid}/catalog/{id}/graph` | `schema lineage` | [Lineage](https://docs.dremio.com/dremio-cloud/api/catalog/lineage) |
 | `GET /v0/projects/{pid}/catalog/{id}/collaboration/wiki` | `schema wiki` | [Wiki](https://docs.dremio.com/dremio-cloud/api/catalog/wiki) |
 | `GET /v0/projects/{pid}/catalog/{id}/collaboration/tag` | `schema wiki` | [Tag](https://docs.dremio.com/dremio-cloud/api/catalog/tag) |
-| `POST /v0/api/projects/{pid}/search` | `catalog search` | [Search](https://docs.dremio.com/dremio-cloud/api/search) |
+| `POST /v0/projects/{pid}/search` | `catalog search` | [Search](https://docs.dremio.com/dremio-cloud/api/search) |
 | `GET /v0/projects/{pid}/reflection/{id}` | `reflect status` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |
 | `POST /v0/projects/{pid}/reflection/{id}/refresh` | `reflect refresh` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |
 | `DELETE /v0/projects/{pid}/reflection/{id}` | `reflect drop` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |

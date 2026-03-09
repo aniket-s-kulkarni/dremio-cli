@@ -38,7 +38,7 @@ async def get_job(client: DremioClient, job_id: str) -> dict:
 async def profile(client: DremioClient, job_id: str) -> dict:
     """Get execution profile for a job via system table."""
     validated = validate_job_id(job_id)
-    sql = f"SELECT * FROM sys.project.job_profiles WHERE job_id = '{validated}'"
+    sql = f"SELECT * FROM sys.project.\"job_profiles\" WHERE job_id = '{validated}'"
     return await run_query(client, sql)
 
 
@@ -90,10 +90,11 @@ def cli_list(
 def cli_get(
     job_id: str = typer.Argument(help="Job ID (UUID)"),
     fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+    fields: str = typer.Option(None, "--fields", "-f", help="Comma-separated fields to include in output"),
 ) -> None:
     """Get detailed status and metadata for a specific job."""
     client = _get_client()
-    _run_command(get_job(client, job_id), client, fmt)
+    _run_command(get_job(client, job_id), client, fmt, fields=fields)
 
 
 @app.command("profile")

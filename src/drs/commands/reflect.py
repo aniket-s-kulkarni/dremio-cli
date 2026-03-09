@@ -23,7 +23,7 @@ async def list_reflections(client: DremioClient, path: str) -> dict:
     except httpx.HTTPStatusError as exc:
         raise handle_api_error(exc) from exc
     dataset_id = entity["id"]
-    sql = f"SELECT * FROM sys.reflections WHERE dataset_id = '{dataset_id}'"
+    sql = f"SELECT * FROM sys.project.\"reflections\" WHERE dataset_id = '{dataset_id}'"
     return await run_query(client, sql)
 
 
