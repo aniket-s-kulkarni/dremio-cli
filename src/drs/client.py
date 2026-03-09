@@ -32,10 +32,12 @@ class DremioClient:
     # -- URL builders --
 
     def _v0(self, path: str) -> str:
+        """Project-scoped URL. Dremio Cloud serves all project APIs under this path."""
         return f"{self.config.uri}/v0/projects/{self.config.project_id}{path}"
 
     def _v3(self, path: str) -> str:
-        return f"{self.config.uri}/api/v3/projects/{self.config.project_id}{path}"
+        """Alias for _v0 — Cloud serves catalog/search/reflection under the same project-scoped path."""
+        return self._v0(path)
 
     def _v1(self, path: str) -> str:
         return f"{self.config.uri}/v1{path}"
