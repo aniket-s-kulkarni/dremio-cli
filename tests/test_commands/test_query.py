@@ -80,6 +80,23 @@ async def test_run_query_pagination(mock_client) -> None:
     assert mock_client.get_job_results.call_count == 2
 
 
+@pytest.mark.asyncio
+async def test_run_query_dict_rows(mock_client) -> None:
+    """Test result parsing when API returns rows as named dicts (real Cloud behavior)."""
+    mock_client.submit_sql = AsyncMock(return_value={"id": "job-dict"})
+    mock_client.get_job_status = AsyncMock(return_value={
+        "jobState": "COMPLETED", "rowCount": 2,
+    })
+    mock_client.get_job_results = AsyncMock(return_value={
+        "rows": [{"hello": "1"}, {"hello": "2"}],
+    })
+
+    result = await run_query(mock_client, "SELECT 1 AS hello UNION SELECT 2")
+
+    assert result["rowCount"] == 2
+    assert result["rows"] == [{"hello": "1"}, {"hello": "2"}]
+
+
 # -- Polling error handling tests (P2 fix) --
 
 

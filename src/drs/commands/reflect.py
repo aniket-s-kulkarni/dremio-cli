@@ -56,10 +56,15 @@ def _get_client() -> DremioClient:
 
 
 def _run_command(coro, client, fmt: OutputFormat = OutputFormat.json, fields: str | None = None) -> None:
+    async def _execute():
+        try:
+            return await coro
+        finally:
+            await client.close()
+
     try:
-        result = asyncio.run(coro)
+        result = asyncio.run(_execute())
     except Exception as exc:
-        asyncio.run(client.close())
         from drs.utils import DremioAPIError
         if isinstance(exc, DremioAPIError):
             error(str(exc))
@@ -68,7 +73,6 @@ def _run_command(coro, client, fmt: OutputFormat = OutputFormat.json, fields: st
             error(str(exc))
             raise typer.Exit(1)
         raise
-    asyncio.run(client.close())
     output(result, fmt, fields=fields)
 
 

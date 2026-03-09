@@ -92,17 +92,18 @@ class DremioClient:
             params["include"] = ",".join(include)
         if exclude:
             params["exclude"] = ",".join(exclude)
-        return await self._get(self._v3(f"/catalog/{entity_id}"), params=params or None)
+        path = "/catalog" if not entity_id else f"/catalog/{entity_id}"
+        return await self._get(self._v3(path), params=params or None)
 
     async def get_catalog_by_path(self, path_parts: list[str]) -> dict:
         joined = "/".join(path_parts)
         return await self._get(self._v3(f"/catalog/by-path/{joined}"))
 
     async def search(self, query: str, filter_: str | None = None) -> dict:
-        body: dict[str, Any] = {"query": query}
+        params: dict[str, str] = {"query": query}
         if filter_:
-            body["filter"] = filter_
-        return await self._post(self._v3("/search"), json=body)
+            params["filter"] = filter_
+        return await self._get(self._v3("/search"), params=params)
 
     async def get_lineage(self, entity_id: str) -> dict:
         return await self._get(self._v3(f"/catalog/{entity_id}/graph"))

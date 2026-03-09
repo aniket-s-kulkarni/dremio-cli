@@ -52,11 +52,16 @@ async def run_query(client: DremioClient, sql: str, context: list[str] | None = 
             page = await client.get_job_results(job_id, limit=limit, offset=offset)
         except httpx.HTTPStatusError as exc:
             raise handle_api_error(exc) from exc
-        columns = page.get("columns", [])
-        col_names = [c.get("name", f"col_{i}") for i, c in enumerate(columns)]
         for raw_row in page.get("rows", []):
-            row = dict(zip(col_names, raw_row.get("values", raw_row.get("row", []))))
-            all_rows.append(row)
+            if isinstance(raw_row, dict) and "values" not in raw_row and "row" not in raw_row:
+                # API returns rows as named dicts already (e.g., {"col1": "val1"})
+                all_rows.append(raw_row)
+            else:
+                # Fallback: rows as list of values with separate column schema
+                columns = page.get("schema", page.get("columns", []))
+                col_names = [c.get("name", f"col_{i}") for i, c in enumerate(columns)]
+                values = raw_row.get("values", raw_row.get("row", []))
+                all_rows.append(dict(zip(col_names, values)))
         offset += limit
 
     return {"job_id": job_id, "state": state, "rowCount": len(all_rows), "rows": all_rows}
@@ -85,16 +90,20 @@ def _get_client() -> DremioClient:
 
 def _run_command(coro, client, fmt: OutputFormat = OutputFormat.json, fields: str | None = None) -> None:
     """Run an async command with error handling and cleanup."""
+    async def _execute():
+        try:
+            return await coro
+        finally:
+            await client.close()
+
     try:
-        result = asyncio.run(coro)
+        result = asyncio.run(_execute())
     except Exception as exc:
         from drs.utils import DremioAPIError
         if isinstance(exc, DremioAPIError):
             error(str(exc))
             raise typer.Exit(1)
         raise
-    finally:
-        asyncio.run(client.close())
     output(result, fmt, fields=fields)
 
 
@@ -113,16 +122,21 @@ def cli_run(
     """
     client = _get_client()
     ctx = context.split(".") if context else None
+
+    async def _execute():
+        try:
+            return await run_query(client, sql, context=ctx)
+        finally:
+            await client.close()
+
     try:
-        result = asyncio.run(run_query(client, sql, context=ctx))
+        result = asyncio.run(_execute())
     except Exception as exc:
-        asyncio.run(client.close())
         from drs.utils import DremioAPIError
         if isinstance(exc, DremioAPIError):
             error(str(exc))
             raise typer.Exit(1)
         raise
-    asyncio.run(client.close())
     if result.get("state") != "COMPLETED":
         error(f"Query {result.get('state')}: {result.get('error', '')}")
         raise typer.Exit(1)

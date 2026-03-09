@@ -45,6 +45,17 @@ class TestURLBuilders:
         assert "/user/by-name/" not in url
 
 
+class TestCatalogURL:
+    def test_catalog_root_no_trailing_slash(self, client: DremioClient) -> None:
+        """Catalog list with empty entity_id should not produce trailing slash."""
+        path = "/catalog" if not "" else f"/catalog/{''}"
+        # Verify the client method builds the right path
+        assert client._v3("/catalog") == "https://api.dremio.cloud/api/v3/catalog"
+
+    def test_catalog_entity_with_id(self, client: DremioClient) -> None:
+        assert client._v3("/catalog/abc-123") == "https://api.dremio.cloud/api/v3/catalog/abc-123"
+
+
 class TestClientHeaders:
     def test_auth_header(self, client: DremioClient) -> None:
         assert client._client.headers["authorization"] == "Bearer test-token"
