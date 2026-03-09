@@ -28,8 +28,9 @@ class TestURLBuilders:
     def test_v3_url(self, client: DremioClient) -> None:
         assert client._v3("/catalog/123") == "https://api.dremio.cloud/v0/projects/proj-123/catalog/123"
 
-    def test_v3_search_url(self, client: DremioClient) -> None:
-        assert client._v3("/search") == "https://api.dremio.cloud/v0/projects/proj-123/search"
+    def test_search_url_not_project_scoped(self, client: DremioClient) -> None:
+        """Search uses /api/v3/search (not project-scoped), per Dremio Cloud docs."""
+        assert f"{client.config.uri}/api/v3/search" == "https://api.dremio.cloud/api/v3/search"
 
     def test_v3_is_v0(self, client: DremioClient) -> None:
         """v3 is an alias for v0 — Cloud serves all project APIs under /v0/projects/."""

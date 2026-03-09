@@ -102,10 +102,10 @@ class DremioClient:
         return await self._get(self._v3(f"/catalog/by-path/{joined}"))
 
     async def search(self, query: str, filter_: str | None = None) -> dict:
-        params: dict[str, str] = {"query": query}
+        body: dict[str, str] = {"query": query}
         if filter_:
-            params["filter"] = filter_
-        return await self._get(self._v3("/search"), params=params)
+            body["filter"] = filter_
+        return await self._post(f"{self.config.uri}/api/v3/search", json=body)
 
     async def get_lineage(self, entity_id: str) -> dict:
         return await self._get(self._v3(f"/catalog/{entity_id}/graph"))

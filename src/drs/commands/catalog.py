@@ -17,7 +17,7 @@ app = typer.Typer(help="Browse and search the Dremio catalog.")
 async def list_catalog(client: DremioClient) -> dict:
     """List top-level catalog entities (sources, spaces, home)."""
     try:
-        root = await client.get_catalog_entity("", include=["children"])
+        root = await client.get_catalog_entity("")
     except httpx.HTTPStatusError as exc:
         raise handle_api_error(exc) from exc
     children = root.get("data", root.get("children", []))
