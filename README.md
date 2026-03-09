@@ -1,6 +1,6 @@
 # drs — Developer CLI for Dremio Cloud
 
-A unified CLI + MCP server + Claude Code plugin for Dremio Cloud. Query data, browse catalogs, inspect schemas, manage reflections, monitor jobs, and audit access — all from the terminal or your AI agent.
+A developer CLI + Claude Code plugin for Dremio Cloud. Query data, browse catalogs, inspect schemas, manage reflections, monitor jobs, and audit access — all from the terminal.
 
 > **Scope:** Dremio Cloud only. Dremio Software has different auth and API behavior — not supported in this version.
 
@@ -8,15 +8,12 @@ A unified CLI + MCP server + Claude Code plugin for Dremio Cloud. Query data, br
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-│  drs CLI     │────▶│              │────▶│ Dremio Cloud API │
-│  (typer)     │     │  client.py   │     │ (REST + SQL)     │
-├─────────────┤     │  (httpx)     │     └─────────────────┘
-│  drs mcp     │────▶│              │
-│  (FastMCP)   │     └──────────────┘
-└─────────────┘
+│  drs CLI     │────▶│  client.py   │────▶│ Dremio Cloud API │
+│  (typer)     │     │  (httpx)     │     │ (REST + SQL)     │
+└─────────────┘     └──────────────┘     └─────────────────┘
 ```
 
-Commands talk to `client.py` (the single HTTP layer). Some operations use the REST API directly (catalog, reflections, access), others use SQL via system tables (jobs, reflection listing by dataset). The MCP server is a thin transport wrapper over the same command functions — zero duplicated logic.
+Commands talk to `client.py` (the single HTTP layer). Some operations use the REST API directly (catalog, reflections, access), others use SQL via system tables (jobs, reflection listing by dataset).
 
 ## Quickstart
 
@@ -73,61 +70,6 @@ drs jobs list --status FAILED --output pretty
 drs schema describe myspace.mytable --output csv
 ```
 
-## MCP Server (AI Agent Integration)
-
-Start the MCP stdio server:
-
-```bash
-drs mcp
-```
-
-Optionally filter which tool groups are exposed:
-
-```bash
-drs mcp --services query,schema
-```
-
-### Claude Desktop configuration
-
-Add to your Claude Desktop config (`claude_desktop_config.json`):
-
-```json
-{
-  "mcpServers": {
-    "Dremio": {
-      "command": "uv",
-      "args": ["run", "--directory", "/path/to/drs", "drs", "mcp"]
-    }
-  }
-}
-```
-
-### Available MCP tools (19)
-
-| Tool | Description |
-|------|-------------|
-| `dremio_query_run` | Execute SQL query, return rows as JSON |
-| `dremio_query_status` | Check job status by ID |
-| `dremio_query_cancel` | Cancel a running job |
-| `dremio_catalog_list` | List top-level sources, spaces, home |
-| `dremio_catalog_search` | Full-text search for tables, views, sources |
-| `dremio_catalog_get` | Get metadata by dot-separated path |
-| `dremio_schema_describe` | Column names, types, nullability |
-| `dremio_schema_lineage` | Upstream/downstream dependency graph |
-| `dremio_schema_wiki` | Wiki descriptions and tags |
-| `dremio_schema_sample` | Preview sample rows (default 10) |
-| `dremio_reflect_list` | List reflections on a dataset |
-| `dremio_reflect_status` | Reflection freshness and refresh timing |
-| `dremio_reflect_refresh` | Trigger reflection refresh |
-| `dremio_reflect_drop` | Delete a reflection |
-| `dremio_jobs_list` | Recent jobs, filterable by status |
-| `dremio_jobs_get` | Detailed job metadata |
-| `dremio_jobs_profile` | Operator-level execution profile |
-| `dremio_access_grants` | ACL grants on a catalog entity |
-| `dremio_access_roles` | List all org roles |
-| `dremio_access_whoami` | Current authenticated user info |
-| `dremio_access_audit` | Audit a user's roles and permissions |
-
 ## Claude Code Plugin
 
 Install as a Claude Code plugin for Dremio-aware skills:
@@ -154,7 +96,7 @@ Install as a Claude Code plugin for Dremio-aware skills:
 
 | Repo | Relationship |
 |------|-------------|
-| `dremio/dremio-mcp` | **Predecessor.** `drs mcp` supersedes it with a CLI layer underneath. Config format preserved. |
+| `dremio/dremio-mcp` | **Sibling.** MCP server for AI agent integration. `drs` focuses on CLI; config format is shared. |
 | `dremio/claude-plugins` | **Absorbed.** Skills rewritten to use `drs` commands instead of raw curl. |
 | `developer-advocacy-dremio/dremio-agent-skill` | **Referenced.** Wizard patterns informed skill design. |
 

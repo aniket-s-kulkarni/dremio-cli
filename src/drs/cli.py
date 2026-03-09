@@ -61,16 +61,6 @@ def get_client() -> DremioClient:
     return DremioClient(get_config())
 
 
-@app.command("mcp")
-def mcp_command(
-    services: Optional[str] = typer.Option(None, "--services", help="Comma-separated tool groups to expose"),
-) -> None:
-    """Start MCP stdio server for Claude Desktop / AI agent integration."""
-    from drs.mcp_server import create_server
-    server = create_server(services=services.split(",") if services else None)
-    server.run(transport="stdio")
-
-
 @app.command("describe")
 def describe_command(
     command: str = typer.Argument(help="Command to describe (e.g., 'query.run', 'catalog.get', 'reflect.drop')"),
