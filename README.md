@@ -48,28 +48,18 @@ There are three ways to authenticate, in order of priority:
 **Option A: CLI flags** (highest priority — override everything)
 
 ```bash
-# Token auth (PAT or session token)
-drs --token YOUR_TOKEN --project-id YOUR_PROJECT_ID query run "SELECT 1"
-
-# Username/password auth (logs in automatically)
-drs --user admin --password secret --project-id YOUR_PROJECT_ID query run "SELECT 1"
+drs --token YOUR_PAT --project-id YOUR_PROJECT_ID query run "SELECT 1"
 
 # EU region
-drs --uri https://api.eu.dremio.cloud --token YOUR_TOKEN --project-id YOUR_PROJECT_ID query run "SELECT 1"
+drs --uri https://api.eu.dremio.cloud --token YOUR_PAT --project-id YOUR_PROJECT_ID query run "SELECT 1"
 ```
 
 **Option B: Environment variables**
 
 ```bash
-# Token auth
 export DREMIO_TOKEN=dremio_pat_xxxxxxxxxxxxx
 export DREMIO_PROJECT_ID=your-project-id
 # export DREMIO_URI=https://api.eu.dremio.cloud  # optional, for EU region
-
-# Or username/password auth
-export DREMIO_USER=your-username
-export DREMIO_PASSWORD=your-password
-export DREMIO_PROJECT_ID=your-project-id
 ```
 
 **Option C: Config file** (lowest priority)
@@ -211,12 +201,10 @@ Commands that query system tables (`jobs list`, `jobs profile`, `reflect list`, 
 | Priority | Token | Project ID | API URI |
 |----------|-------|------------|---------|
 | CLI flag | `--token` | `--project-id` | `--uri` |
-| CLI flag | `--user` + `--password` (login) | | |
 | Env var | `DREMIO_TOKEN` | `DREMIO_PROJECT_ID` | `DREMIO_URI` |
 | Env var | `DREMIO_PAT` *(legacy)* | | |
-| Env var | `DREMIO_USER` + `DREMIO_PASSWORD` (login) | | |
 | Config file | `pat:` / `token:` | `project_id:` / `projectId:` | `uri:` / `endpoint:` |
-| Default | *(required)* | *(required for DC)* | `https://api.dremio.cloud` |
+| Default | *(required)* | *(required)* | `https://api.dremio.cloud` |
 
 The config file also accepts the legacy `dremio-mcp` format (`token`, `projectId`, `endpoint`) for backwards compatibility.
 

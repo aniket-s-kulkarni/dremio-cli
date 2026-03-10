@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 from typing import Any
 
-import httpx
 import yaml
 from pydantic import BaseModel
 
@@ -24,37 +23,19 @@ class DrsConfig(BaseModel):
     project_id: str
 
 
-def _login(uri: str, user: str, password: str) -> str:
-    """Exchange username + password for a session token via Dremio login API."""
-    resp = httpx.post(
-        f"{uri}/apiv2/login",
-        json={"userName": user, "password": password},
-        timeout=30.0,
-    )
-    resp.raise_for_status()
-    token = resp.json().get("token")
-    if not token:
-        raise ValueError("Login succeeded but no token returned")
-    return token
-
-
 def load_config(
     config_path: Path | None = None,
     *,
     cli_token: str | None = None,
-    cli_user: str | None = None,
-    cli_password: str | None = None,
     cli_project_id: str | None = None,
     cli_uri: str | None = None,
 ) -> DrsConfig:
     """Load config with resolution order: CLI args > env vars > config file > defaults.
 
     Authentication priority:
-      1. --user + --password CLI args → login for fresh session token
-      2. --token CLI arg
-      3. DREMIO_TOKEN / DREMIO_PAT env var
-      4. Config file pat/token field
-      5. DREMIO_USER + DREMIO_PASSWORD env vars → login for token
+      1. --token CLI arg
+      2. DREMIO_TOKEN / DREMIO_PAT env var
+      3. Config file pat/token field
     """
     # -- Config file (lowest priority) --
     file_values: dict[str, Any] = {}
@@ -90,18 +71,7 @@ def load_config(
         merged["uri"] = cli_uri
     if cli_project_id:
         merged["project_id"] = cli_project_id
-
-    # -- Token resolution: CLI user/pass > CLI token > env user/pass > env/file token --
-    if cli_user and cli_password:
-        # CLI credentials always win — login even if a token exists
-        merged["pat"] = _login(merged.get("uri", DEFAULT_URI), cli_user, cli_password)
-    elif cli_token:
+    if cli_token:
         merged["pat"] = cli_token
-    elif "pat" not in merged:
-        # No token from env/file — try env user/password as last resort
-        user = os.environ.get("DREMIO_USER")
-        password = os.environ.get("DREMIO_PASSWORD")
-        if user and password:
-            merged["pat"] = _login(merged.get("uri", DEFAULT_URI), user, password)
 
     return DrsConfig(**merged)
