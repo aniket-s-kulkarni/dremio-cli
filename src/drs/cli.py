@@ -26,11 +26,11 @@ import typer
 
 from drs.auth import DrsConfig, load_config
 from drs.client import DremioClient
-from drs.commands import query, catalog, schema, reflect, jobs, access
+from drs.commands import query, catalog, schema, reflect, jobs, access, engine, user, role, grant
 
 app = typer.Typer(
     name="drs",
-    help="Developer CLI for Dremio Cloud — query, catalog, schema, reflections, jobs, and access.",
+    help="Developer CLI for Dremio Cloud — query, catalog, schema, reflections, jobs, access, engines, users, roles, and grants.",
     no_args_is_help=True,
 )
 
@@ -41,6 +41,10 @@ app.add_typer(schema.app, name="schema")
 app.add_typer(reflect.app, name="reflect")
 app.add_typer(jobs.app, name="jobs")
 app.add_typer(access.app, name="access")
+app.add_typer(engine.app, name="engine")
+app.add_typer(user.app, name="user")
+app.add_typer(role.app, name="role")
+app.add_typer(grant.app, name="grant")
 
 # Global state for config
 _config: DrsConfig | None = None
@@ -102,10 +106,16 @@ def describe_command(
     result = _describe(command)
     if result is None:
         print(f"Unknown command: {command}", file=sys.stderr)
-        print("Available commands: query.run, query.status, query.cancel, catalog.list, catalog.get, "
-              "catalog.search, schema.describe, schema.lineage, schema.wiki, schema.sample, "
-              "reflect.list, reflect.status, reflect.refresh, reflect.drop, jobs.list, jobs.get, "
-              "jobs.profile, access.grants, access.roles, access.whoami, access.audit", file=sys.stderr)
+        print("Available commands: query.run, query.status, query.cancel, "
+              "catalog.list, catalog.get, catalog.search, catalog.create-space, catalog.create-folder, catalog.delete, "
+              "schema.describe, schema.lineage, schema.wiki, schema.set-wiki, schema.set-tags, schema.sample, "
+              "reflect.create, reflect.list, reflect.status, reflect.refresh, reflect.drop, "
+              "jobs.list, jobs.get, jobs.profile, "
+              "access.grants, access.roles, access.whoami, access.audit, "
+              "engine.list, engine.get, engine.create, engine.update, engine.delete, engine.enable, engine.disable, "
+              "user.list, user.get, user.invite, user.update, user.delete, "
+              "role.list, role.get, role.create, role.update, role.delete, "
+              "grant.get, grant.set, grant.remove", file=sys.stderr)
         raise typer.Exit(1)
     print(json.dumps(result, indent=2))
 

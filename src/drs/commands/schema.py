@@ -97,6 +97,54 @@ async def wiki(client: DremioClient, path: str) -> dict:
     }
 
 
+async def set_wiki(client: DremioClient, path: str, text: str) -> dict:
+    """Set wiki description text for an entity."""
+    parts = parse_path(path)
+    try:
+        entity = await client.get_catalog_by_path(parts)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+    entity_id = entity["id"]
+
+    # Try to get existing wiki for version number (optimistic concurrency)
+    version = None
+    try:
+        existing = await client.get_wiki(entity_id)
+        version = existing.get("version")
+    except httpx.HTTPStatusError:
+        pass
+
+    try:
+        result = await client.set_wiki(entity_id, text, version=version)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+    return {"path": path, "id": entity_id, "wiki": text, "result": result}
+
+
+async def set_tags(client: DremioClient, path: str, tags: list[str]) -> dict:
+    """Set tags for an entity."""
+    parts = parse_path(path)
+    try:
+        entity = await client.get_catalog_by_path(parts)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+    entity_id = entity["id"]
+
+    # Try to get existing tags for version number
+    version = None
+    try:
+        existing = await client.get_tags(entity_id)
+        version = existing.get("version")
+    except httpx.HTTPStatusError:
+        pass
+
+    try:
+        result = await client.set_tags(entity_id, tags, version=version)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+    return {"path": path, "id": entity_id, "tags": tags, "result": result}
+
+
 async def sample(client: DremioClient, path: str, limit: int = 10) -> dict:
     """Return sample rows from a table/view."""
     quoted = quote_path_sql(path)
@@ -161,6 +209,29 @@ def cli_wiki(
     """Show wiki description and tags for a catalog entity."""
     client = _get_client()
     _run_command(wiki(client, path), client, fmt)
+
+
+@app.command("set-wiki")
+def cli_set_wiki(
+    path: str = typer.Argument(help='Dot-separated entity path'),
+    text: str = typer.Argument(help='Wiki text to set (Markdown supported)'),
+    fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+) -> None:
+    """Set or update the wiki description for a catalog entity."""
+    client = _get_client()
+    _run_command(set_wiki(client, path, text), client, fmt)
+
+
+@app.command("set-tags")
+def cli_set_tags(
+    path: str = typer.Argument(help='Dot-separated entity path'),
+    tags: str = typer.Argument(help='Comma-separated list of tags (e.g., "pii,finance,daily")'),
+    fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+) -> None:
+    """Set tags on a catalog entity. Replaces all existing tags."""
+    client = _get_client()
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+    _run_command(set_tags(client, path, tag_list), client, fmt)
 
 
 @app.command("sample")

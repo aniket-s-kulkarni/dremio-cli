@@ -48,6 +48,38 @@ async def get_entity(client: DremioClient, path: str) -> dict:
         raise handle_api_error(exc) from exc
 
 
+async def create_space(client: DremioClient, name: str) -> dict:
+    """Create a new space."""
+    try:
+        return await client.create_catalog_entity({"entityType": "space", "name": name})
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+
+async def create_folder(client: DremioClient, path: str) -> dict:
+    """Create a folder at the given dot-separated path (e.g., myspace.newfolder)."""
+    parts = parse_path(path)
+    try:
+        return await client.create_catalog_entity({"entityType": "folder", "path": parts})
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+
+async def delete_entity(client: DremioClient, path: str) -> dict:
+    """Delete a catalog entity by path."""
+    parts = parse_path(path)
+    try:
+        entity = await client.get_catalog_by_path(parts)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+    entity_id = entity["id"]
+    tag = entity.get("tag")
+    try:
+        return await client.delete_catalog_entity(entity_id, tag=tag)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+
 async def search_catalog(client: DremioClient, term: str) -> dict:
     """Full-text search for catalog entities."""
     try:
@@ -107,6 +139,43 @@ def cli_get(
     """
     client = _get_client()
     _run_command(get_entity(client, path), client, fmt, fields=fields)
+
+
+@app.command("create-space")
+def cli_create_space(
+    name: str = typer.Argument(help="Name for the new space"),
+    fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+) -> None:
+    """Create a new space in the catalog."""
+    client = _get_client()
+    _run_command(create_space(client, name), client, fmt)
+
+
+@app.command("create-folder")
+def cli_create_folder(
+    path: str = typer.Argument(help="Dot-separated path for new folder (e.g., myspace.newfolder)"),
+    fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+) -> None:
+    """Create a folder inside a space or another folder."""
+    client = _get_client()
+    _run_command(create_folder(client, path), client, fmt)
+
+
+@app.command("delete")
+def cli_delete(
+    path: str = typer.Argument(help="Dot-separated entity path to delete"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be deleted without deleting"),
+    fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+) -> None:
+    """Delete a catalog entity (space, folder, view, etc.). Cannot be undone.
+
+    Use --dry-run to see the entity metadata before deleting.
+    """
+    client = _get_client()
+    if dry_run:
+        _run_command(get_entity(client, path), client, fmt)
+        return
+    _run_command(delete_entity(client, path), client, fmt)
 
 
 @app.command("search")

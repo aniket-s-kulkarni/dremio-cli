@@ -93,11 +93,15 @@ If this returns `{"job_id": "...", "state": "COMPLETED", "rowCount": 1, "rows": 
 | Group | Commands | What it does |
 |-------|----------|--------------|
 | `drs query` | `run`, `status`, `cancel` | Execute SQL, check job status, cancel running jobs |
-| `drs catalog` | `list`, `get`, `search` | Browse sources/spaces, get entity metadata, full-text search |
-| `drs schema` | `describe`, `lineage`, `wiki`, `sample` | Column types, upstream/downstream deps, wiki docs, preview rows |
-| `drs reflect` | `list`, `status`, `refresh`, `drop` | List reflections on a dataset, check freshness, trigger refresh |
+| `drs catalog` | `list`, `get`, `search`, `create-space`, `create-folder`, `delete` | Browse, search, and manage spaces/folders |
+| `drs schema` | `describe`, `lineage`, `wiki`, `set-wiki`, `set-tags`, `sample` | Column types, deps, wiki/tag management, preview rows |
+| `drs reflect` | `create`, `list`, `status`, `refresh`, `drop` | Full CRUD for reflections (materialized views) |
 | `drs jobs` | `list`, `get`, `profile` | Recent jobs with filters, job details, operator-level profiles |
 | `drs access` | `grants`, `roles`, `whoami`, `audit` | ACLs on entities, org roles, user permission audit |
+| `drs engine` | `list`, `get`, `create`, `update`, `delete`, `enable`, `disable` | Full CRUD for Dremio Cloud engines |
+| `drs user` | `list`, `get`, `invite`, `update`, `delete` | Full CRUD for organization users |
+| `drs role` | `list`, `get`, `create`, `update`, `delete` | Full CRUD for organization roles |
+| `drs grant` | `get`, `set`, `remove` | Manage grants on projects, engines, org resources |
 
 ### Examples
 
@@ -108,11 +112,30 @@ drs query run "SELECT * FROM myspace.orders LIMIT 5" --output pretty
 # Search the catalog for anything matching "revenue"
 drs catalog search "revenue"
 
+# Create a space, then a folder inside it
+drs catalog create-space "Analytics"
+drs catalog create-folder Analytics.reports
+
 # Describe a table's columns
 drs schema describe myspace.analytics.monthly_revenue
 
-# Check what reflections exist on a dataset
+# Set wiki docs and tags on a table
+drs schema set-wiki myspace.orders "Primary orders table. Refreshed daily from Salesforce."
+drs schema set-tags myspace.orders "pii,finance,daily"
+
+# Create a raw reflection on a dataset
+drs reflect create myspace.orders --type raw
 drs reflect list myspace.orders
+
+# Manage engines
+drs engine list
+drs engine create "analytics-engine" --size LARGE
+drs engine disable eng-abc-123
+
+# Manage users and roles
+drs user list --output pretty
+drs role create "data-analyst"
+drs grant set projects my-project-id role role-abc "MANAGE_GRANTS,CREATE_TABLE"
 
 # Find failed jobs from recent history
 drs jobs list --status FAILED --output pretty
@@ -156,6 +179,25 @@ drs describe reflect.list
 
 Returns a JSON schema with parameter names, types, required/optional, and descriptions. Useful for building automation on top of `drs`.
 
+## CRUD design principle
+
+Every Dremio object has consistent CLI commands — no guessing whether to use a CLI subcommand or raw SQL:
+
+| Object | List | Read | Create | Update | Delete |
+|--------|------|------|--------|--------|--------|
+| **Spaces** | `catalog list` | `catalog get` | `catalog create-space` | — | `catalog delete` |
+| **Folders** | `catalog get` | `catalog get` | `catalog create-folder` | — | `catalog delete` |
+| **Tables/Views** | `catalog get` | `schema describe/sample` | `query run` (DDL) | `query run` (DDL) | `catalog delete` |
+| **Wiki/Tags** | `schema wiki` | `schema wiki` | `schema set-wiki/set-tags` | `schema set-wiki/set-tags` | — |
+| **Reflections** | `reflect list` | `reflect status` | `reflect create` | `reflect refresh` | `reflect drop` |
+| **Engines** | `engine list` | `engine get` | `engine create` | `engine update` | `engine delete` |
+| **Users** | `user list` | `user get` | `user invite` | `user update` | `user delete` |
+| **Roles** | `role list` | `role get` | `role create` | `role update` | `role delete` |
+| **Grants** | `grant get` | `grant get` | `grant set` | `grant set` | `grant remove` |
+| **Jobs** | `jobs list` | `jobs get/profile` | `query run` | — | `query cancel` |
+
+All mutations go through the REST API (not SQL), so the CLI experience is uniform. The only exception is DDL for tables/views (CREATE VIEW, ALTER TABLE, etc.), which is inherently SQL — use `drs query run` for those.
+
 ## How it works
 
 ```
@@ -181,16 +223,25 @@ All endpoints target `https://api.dremio.cloud`. See the [Dremio Cloud API refer
 | `GET /v0/projects/{pid}/job/{id}/results` | `query run` (result fetch) | [Job Results](https://docs.dremio.com/dremio-cloud/api/job/job-results/) |
 | `POST /v0/projects/{pid}/job/{id}/cancel` | `query cancel` | [Job](https://docs.dremio.com/dremio-cloud/api/job/) |
 | `GET /v0/projects/{pid}/catalog` | `catalog list` | [Catalog](https://docs.dremio.com/dremio-cloud/api/catalog/) |
+| `POST /v0/projects/{pid}/catalog` | `catalog create-space`, `catalog create-folder` | [Catalog](https://docs.dremio.com/dremio-cloud/api/catalog/) |
 | `GET /v0/projects/{pid}/catalog/by-path/{path}` | `catalog get`, `schema describe`, `schema lineage`, `schema wiki`, `access grants` | [Catalog](https://docs.dremio.com/dremio-cloud/api/catalog/) |
+| `DELETE /v0/projects/{pid}/catalog/{id}` | `catalog delete` | [Catalog](https://docs.dremio.com/dremio-cloud/api/catalog/) |
 | `GET /v0/projects/{pid}/catalog/{id}/graph` | `schema lineage` | [Lineage](https://docs.dremio.com/dremio-cloud/api/catalog/lineage) |
-| `GET /v0/projects/{pid}/catalog/{id}/collaboration/wiki` | `schema wiki` | [Wiki](https://docs.dremio.com/dremio-cloud/api/catalog/wiki) |
-| `GET /v0/projects/{pid}/catalog/{id}/collaboration/tag` | `schema wiki` | [Tag](https://docs.dremio.com/dremio-cloud/api/catalog/tag) |
+| `GET/POST /v0/projects/{pid}/catalog/{id}/collaboration/wiki` | `schema wiki`, `schema set-wiki` | [Wiki](https://docs.dremio.com/dremio-cloud/api/catalog/wiki) |
+| `GET/POST /v0/projects/{pid}/catalog/{id}/collaboration/tag` | `schema wiki`, `schema set-tags` | [Tag](https://docs.dremio.com/dremio-cloud/api/catalog/tag) |
 | `POST /v0/projects/{pid}/search` | `catalog search` | [Search](https://docs.dremio.com/dremio-cloud/api/search) |
+| `POST /v0/projects/{pid}/reflection` | `reflect create` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |
 | `GET /v0/projects/{pid}/reflection/{id}` | `reflect status` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |
 | `POST /v0/projects/{pid}/reflection/{id}/refresh` | `reflect refresh` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |
 | `DELETE /v0/projects/{pid}/reflection/{id}` | `reflect drop` | [Reflection](https://docs.dremio.com/dremio-cloud/api/reflection/) |
-| `GET /v1/users`, `GET /v1/users/name/{name}` | `access whoami`, `access audit` | — |
-| `GET /v1/roles` | `access roles` | — |
+| `GET/POST/PUT/DELETE /v0/projects/{pid}/engines[/{id}]` | `engine list/get/create/update/delete` | [Engines](https://docs.dremio.com/dremio-cloud/api/) |
+| `PUT /v0/projects/{pid}/engines/{id}/enable\|disable` | `engine enable`, `engine disable` | [Engines](https://docs.dremio.com/dremio-cloud/api/) |
+| `GET /v1/users`, `GET /v1/users/name/{name}`, `GET /v1/users/{id}` | `user list/get`, `access whoami/audit` | [Users](https://docs.dremio.com/dremio-cloud/api/) |
+| `POST /v1/users/invite` | `user invite` | [Users](https://docs.dremio.com/dremio-cloud/api/) |
+| `PUT /v1/users/{id}`, `DELETE /v1/users/{id}` | `user update`, `user delete` | [Users](https://docs.dremio.com/dremio-cloud/api/) |
+| `GET /v1/roles[/{id}]`, `GET /v1/roles/name/{name}` | `role list/get`, `access roles` | [Roles](https://docs.dremio.com/dremio-cloud/api/) |
+| `POST /v1/roles`, `PUT /v1/roles/{id}`, `DELETE /v1/roles/{id}` | `role create/update/delete` | [Roles](https://docs.dremio.com/dremio-cloud/api/) |
+| `GET/PUT/DELETE /v1/{scope}/{id}/grants/{type}/{id}` | `grant get/set/remove` | [Grants](https://docs.dremio.com/dremio-cloud/api/) |
 
 Commands that query system tables (`jobs list`, `jobs profile`, `reflect list`, `schema sample`) use `POST /v0/projects/{pid}/sql` to submit SQL against `sys.project.*` tables.
 
@@ -280,11 +331,15 @@ src/drs/
   introspect.py    # Command schema registry for drs describe
   commands/
     query.py       # run, status, cancel
-    catalog.py     # list, get, search
-    schema.py      # describe, lineage, wiki, sample
-    reflect.py     # list, status, refresh, drop
+    catalog.py     # list, get, search, create-space, create-folder, delete
+    schema.py      # describe, lineage, wiki, set-wiki, set-tags, sample
+    reflect.py     # create, list, status, refresh, drop
     jobs.py        # list, get, profile
     access.py      # grants, roles, whoami, audit
+    engine.py      # list, get, create, update, delete, enable, disable
+    user.py        # list, get, invite, update, delete
+    role.py        # list, get, create, update, delete
+    grant.py       # get, set, remove
 ```
 
 ## Related projects

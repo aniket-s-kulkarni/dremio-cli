@@ -42,6 +42,39 @@ async def list_reflections(client: DremioClient, path: str) -> dict:
     return await run_query(client, sql)
 
 
+async def create(client: DremioClient, path: str, rtype: str, display_fields: list[str] | None = None) -> dict:
+    """Create a reflection on a dataset.
+
+    rtype: 'raw' or 'aggregation'
+    display_fields: field names to include in the reflection
+    """
+    parts = parse_path(path)
+    try:
+        entity = await client.get_catalog_by_path(parts)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+    dataset_id = entity["id"]
+    body: dict = {
+        "type": rtype.upper(),
+        "datasetId": dataset_id,
+    }
+
+    fields = entity.get("fields", [])
+    if rtype.lower() == "raw":
+        display = display_fields or [f["name"] for f in fields]
+        body["displayFields"] = [{"name": n} for n in display]
+    elif rtype.lower() == "aggregation":
+        # For aggregation, require display_fields as dimensions
+        if display_fields:
+            body["dimensionFields"] = [{"name": n, "granularity": "DATE"} for n in display_fields]
+
+    try:
+        return await client.create_reflection(body)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+
 async def status(client: DremioClient, reflection_id: str) -> dict:
     try:
         return await client.get_reflection(reflection_id)
@@ -89,6 +122,23 @@ def _run_command(coro, client, fmt: OutputFormat = OutputFormat.json, fields: st
             raise typer.Exit(1)
         raise
     output(result, fmt, fields=fields)
+
+
+@app.command("create")
+def cli_create(
+    path: str = typer.Argument(help="Dot-separated dataset path to create a reflection on"),
+    rtype: str = typer.Option("raw", "--type", "-t", help="Reflection type: raw or aggregation"),
+    fields_list: str = typer.Option(None, "--fields", "-f", help="Comma-separated field names to include"),
+    fmt: OutputFormat = typer.Option(OutputFormat.json, "--output", "-o", help="Output format"),
+) -> None:
+    """Create a new reflection on a dataset.
+
+    For raw reflections, includes all fields by default (override with --fields).
+    For aggregation reflections, specify dimension fields with --fields.
+    """
+    client = _get_client()
+    display = [f.strip() for f in fields_list.split(",") if f.strip()] if fields_list else None
+    _run_command(create(client, path, rtype, display_fields=display), client, fmt)
 
 
 @app.command("list")

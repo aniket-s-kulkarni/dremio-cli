@@ -270,6 +270,361 @@ COMMAND_SCHEMAS: dict[str, dict] = {
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
         ],
     },
+
+    # -- Catalog CRUD additions --
+
+    "catalog.create-space": {
+        "group": "catalog",
+        "command": "create-space",
+        "description": "Create a new space in the catalog.",
+        "mechanism": "REST",
+        "endpoints": ["POST /v0/projects/{pid}/catalog"],
+        "mutating": True,
+        "parameters": [
+            {"name": "name", "type": "string", "required": True, "positional": True, "description": "Name for the new space"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "catalog.create-folder": {
+        "group": "catalog",
+        "command": "create-folder",
+        "description": "Create a folder inside a space or another folder.",
+        "mechanism": "REST",
+        "endpoints": ["POST /v0/projects/{pid}/catalog"],
+        "mutating": True,
+        "parameters": [
+            {"name": "path", "type": "string", "required": True, "positional": True, "description": "Dot-separated path for new folder (e.g., myspace.newfolder)"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "catalog.delete": {
+        "group": "catalog",
+        "command": "delete",
+        "description": "Delete a catalog entity (space, folder, view, etc.). Cannot be undone.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/catalog/by-path/{path}", "DELETE /v0/projects/{pid}/catalog/{id}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "path", "type": "string", "required": True, "positional": True, "description": "Dot-separated entity path to delete"},
+            {"name": "dry_run", "type": "boolean", "required": False, "default": False, "description": "Show what would be deleted without deleting"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+
+    # -- Schema CRUD additions --
+
+    "schema.set-wiki": {
+        "group": "schema",
+        "command": "set-wiki",
+        "description": "Set or update the wiki description for a catalog entity.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/catalog/by-path/{path}", "POST /v0/projects/{pid}/catalog/{id}/collaboration/wiki"],
+        "mutating": True,
+        "parameters": [
+            {"name": "path", "type": "string", "required": True, "positional": True, "description": "Dot-separated entity path"},
+            {"name": "text", "type": "string", "required": True, "positional": True, "description": "Wiki text to set (Markdown supported)"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "schema.set-tags": {
+        "group": "schema",
+        "command": "set-tags",
+        "description": "Set tags on a catalog entity. Replaces all existing tags.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/catalog/by-path/{path}", "POST /v0/projects/{pid}/catalog/{id}/collaboration/tag"],
+        "mutating": True,
+        "parameters": [
+            {"name": "path", "type": "string", "required": True, "positional": True, "description": "Dot-separated entity path"},
+            {"name": "tags", "type": "string", "required": True, "positional": True, "description": 'Comma-separated list of tags (e.g., "pii,finance,daily")'},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+
+    # -- Reflection creation --
+
+    "reflect.create": {
+        "group": "reflect",
+        "command": "create",
+        "description": "Create a new reflection on a dataset.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/catalog/by-path/{path}", "POST /v0/projects/{pid}/reflection"],
+        "mutating": True,
+        "parameters": [
+            {"name": "path", "type": "string", "required": True, "positional": True, "description": "Dot-separated dataset path"},
+            {"name": "type", "type": "enum", "required": False, "default": "raw", "enum": ["raw", "aggregation"], "flag": "--type/-t", "description": "Reflection type"},
+            {"name": "fields", "type": "string", "required": False, "flag": "--fields/-f", "description": "Comma-separated field names to include"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+
+    # -- Engine management --
+
+    "engine.list": {
+        "group": "engine",
+        "command": "list",
+        "description": "List all engines in the project.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/engines"],
+        "parameters": [
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "description": "Comma-separated fields to include"},
+        ],
+    },
+    "engine.get": {
+        "group": "engine",
+        "command": "get",
+        "description": "Get details for a specific engine.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/engines/{id}"],
+        "parameters": [
+            {"name": "engine_id", "type": "string", "required": True, "positional": True, "description": "Engine ID"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "description": "Comma-separated fields to include"},
+        ],
+    },
+    "engine.create": {
+        "group": "engine",
+        "command": "create",
+        "description": "Create a new engine.",
+        "mechanism": "REST",
+        "endpoints": ["POST /v0/projects/{pid}/engines"],
+        "mutating": True,
+        "parameters": [
+            {"name": "name", "type": "string", "required": True, "positional": True, "description": "Name for the new engine"},
+            {"name": "size", "type": "enum", "required": False, "default": "SMALL", "enum": ["SMALL", "MEDIUM", "LARGE", "XLARGE", "XXLARGE"], "flag": "--size/-s", "description": "Engine size"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "engine.update": {
+        "group": "engine",
+        "command": "update",
+        "description": "Update engine configuration (name, size).",
+        "mechanism": "REST",
+        "endpoints": ["GET /v0/projects/{pid}/engines/{id}", "PUT /v0/projects/{pid}/engines/{id}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "engine_id", "type": "string", "required": True, "positional": True, "description": "Engine ID to update"},
+            {"name": "name", "type": "string", "required": False, "flag": "--name", "description": "New engine name"},
+            {"name": "size", "type": "string", "required": False, "flag": "--size/-s", "description": "New engine size"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "engine.delete": {
+        "group": "engine",
+        "command": "delete",
+        "description": "Delete an engine. Cannot be undone.",
+        "mechanism": "REST",
+        "endpoints": ["DELETE /v0/projects/{pid}/engines/{id}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "engine_id", "type": "string", "required": True, "positional": True, "description": "Engine ID to delete"},
+            {"name": "dry_run", "type": "boolean", "required": False, "default": False, "description": "Show engine details without deleting"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "engine.enable": {
+        "group": "engine",
+        "command": "enable",
+        "description": "Enable a disabled engine.",
+        "mechanism": "REST",
+        "endpoints": ["PUT /v0/projects/{pid}/engines/{id}/enable"],
+        "mutating": True,
+        "parameters": [
+            {"name": "engine_id", "type": "string", "required": True, "positional": True, "description": "Engine ID to enable"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "engine.disable": {
+        "group": "engine",
+        "command": "disable",
+        "description": "Disable a running engine.",
+        "mechanism": "REST",
+        "endpoints": ["PUT /v0/projects/{pid}/engines/{id}/disable"],
+        "mutating": True,
+        "parameters": [
+            {"name": "engine_id", "type": "string", "required": True, "positional": True, "description": "Engine ID to disable"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+
+    # -- User management --
+
+    "user.list": {
+        "group": "user",
+        "command": "list",
+        "description": "List all users in the organization.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/users"],
+        "parameters": [
+            {"name": "limit", "type": "integer", "required": False, "default": 100, "flag": "--limit/-n", "description": "Max users to return"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "description": "Comma-separated fields to include"},
+        ],
+    },
+    "user.get": {
+        "group": "user",
+        "command": "get",
+        "description": "Get user details by name or ID.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/users/name/{userName}", "GET /v1/users/{userId}"],
+        "parameters": [
+            {"name": "identifier", "type": "string", "required": True, "positional": True, "description": "Username or user ID"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "description": "Comma-separated fields to include"},
+        ],
+    },
+    "user.invite": {
+        "group": "user",
+        "command": "invite",
+        "description": "Invite a new user by email address.",
+        "mechanism": "REST",
+        "endpoints": ["POST /v1/users/invite"],
+        "mutating": True,
+        "parameters": [
+            {"name": "email", "type": "string", "required": True, "positional": True, "description": "Email address to invite"},
+            {"name": "role_id", "type": "string", "required": False, "flag": "--role-id", "description": "Role ID to assign"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "user.update": {
+        "group": "user",
+        "command": "update",
+        "description": "Update a user's properties.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/users/{userId}", "PUT /v1/users/{userId}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "user_id", "type": "string", "required": True, "positional": True, "description": "User ID to update"},
+            {"name": "name", "type": "string", "required": False, "flag": "--name", "description": "New display name"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "user.delete": {
+        "group": "user",
+        "command": "delete",
+        "description": "Delete a user from the organization. Cannot be undone.",
+        "mechanism": "REST",
+        "endpoints": ["DELETE /v1/users/{userId}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "user_id", "type": "string", "required": True, "positional": True, "description": "User ID to delete"},
+            {"name": "dry_run", "type": "boolean", "required": False, "default": False, "description": "Show user details without deleting"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+
+    # -- Role management --
+
+    "role.list": {
+        "group": "role",
+        "command": "list",
+        "description": "List all roles in the organization.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/roles"],
+        "parameters": [
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "description": "Comma-separated fields to include"},
+        ],
+    },
+    "role.get": {
+        "group": "role",
+        "command": "get",
+        "description": "Get role details by name or ID.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/roles/name/{roleName}", "GET /v1/roles/{roleId}"],
+        "parameters": [
+            {"name": "identifier", "type": "string", "required": True, "positional": True, "description": "Role name or role ID"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+            {"name": "fields", "type": "string", "required": False, "description": "Comma-separated fields to include"},
+        ],
+    },
+    "role.create": {
+        "group": "role",
+        "command": "create",
+        "description": "Create a new role.",
+        "mechanism": "REST",
+        "endpoints": ["POST /v1/roles"],
+        "mutating": True,
+        "parameters": [
+            {"name": "name", "type": "string", "required": True, "positional": True, "description": "Name for the new role"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "role.update": {
+        "group": "role",
+        "command": "update",
+        "description": "Update a role's name.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/roles/{roleId}", "PUT /v1/roles/{roleId}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "role_id", "type": "string", "required": True, "positional": True, "description": "Role ID to update"},
+            {"name": "name", "type": "string", "required": True, "flag": "--name", "description": "New role name"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "role.delete": {
+        "group": "role",
+        "command": "delete",
+        "description": "Delete a role. Cannot be undone.",
+        "mechanism": "REST",
+        "endpoints": ["DELETE /v1/roles/{roleId}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "role_id", "type": "string", "required": True, "positional": True, "description": "Role ID to delete"},
+            {"name": "dry_run", "type": "boolean", "required": False, "default": False, "description": "Show role details without deleting"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+
+    # -- Grant management --
+
+    "grant.get": {
+        "group": "grant",
+        "command": "get",
+        "description": "Get grants for a user or role on a resource.",
+        "mechanism": "REST",
+        "endpoints": ["GET /v1/{scope}/{scopeId}/grants/{granteeType}/{granteeId}"],
+        "parameters": [
+            {"name": "scope", "type": "string", "required": True, "positional": True, "description": "Resource scope (projects, orgs, clouds)"},
+            {"name": "scope_id", "type": "string", "required": True, "positional": True, "description": "Resource ID"},
+            {"name": "grantee_type", "type": "string", "required": True, "positional": True, "description": "Grantee type (user or role)"},
+            {"name": "grantee_id", "type": "string", "required": True, "positional": True, "description": "Grantee ID"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "grant.set": {
+        "group": "grant",
+        "command": "set",
+        "description": "Set grants (privileges) for a user or role on a resource.",
+        "mechanism": "REST",
+        "endpoints": ["PUT /v1/{scope}/{scopeId}/grants/{granteeType}/{granteeId}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "scope", "type": "string", "required": True, "positional": True, "description": "Resource scope (projects, orgs, clouds)"},
+            {"name": "scope_id", "type": "string", "required": True, "positional": True, "description": "Resource ID"},
+            {"name": "grantee_type", "type": "string", "required": True, "positional": True, "description": "Grantee type (user or role)"},
+            {"name": "grantee_id", "type": "string", "required": True, "positional": True, "description": "Grantee ID"},
+            {"name": "privileges", "type": "string", "required": True, "positional": True, "description": "Comma-separated privileges"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
+    "grant.remove": {
+        "group": "grant",
+        "command": "remove",
+        "description": "Remove all grants for a user or role on a resource.",
+        "mechanism": "REST",
+        "endpoints": ["DELETE /v1/{scope}/{scopeId}/grants/{granteeType}/{granteeId}"],
+        "mutating": True,
+        "parameters": [
+            {"name": "scope", "type": "string", "required": True, "positional": True, "description": "Resource scope"},
+            {"name": "scope_id", "type": "string", "required": True, "positional": True, "description": "Resource ID"},
+            {"name": "grantee_type", "type": "string", "required": True, "positional": True, "description": "Grantee type (user or role)"},
+            {"name": "grantee_id", "type": "string", "required": True, "positional": True, "description": "Grantee ID"},
+            {"name": "dry_run", "type": "boolean", "required": False, "default": False, "description": "Show current grants without removing"},
+            {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
+        ],
+    },
 }
 
 
