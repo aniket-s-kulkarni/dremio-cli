@@ -28,7 +28,7 @@ from drs.commands.query import run_query
 from drs.output import OutputFormat, output, error
 from drs.utils import handle_api_error, validate_job_state, validate_job_id
 
-app = typer.Typer(help="List and inspect query jobs.")
+app = typer.Typer(help="List and inspect query jobs.", context_settings={"help_option_names": ["-h", "--help"]})
 
 
 async def list_jobs(

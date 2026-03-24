@@ -27,7 +27,7 @@ from drs.commands.query import run_query
 from drs.output import OutputFormat, output, error
 from drs.utils import handle_api_error, parse_path, quote_path_sql
 
-app = typer.Typer(help="Describe table schemas, trace lineage, and sample data.")
+app = typer.Typer(help="Describe table schemas, trace lineage, and sample data.", context_settings={"help_option_names": ["-h", "--help"]})
 
 
 async def describe(client: DremioClient, path: str) -> dict:
