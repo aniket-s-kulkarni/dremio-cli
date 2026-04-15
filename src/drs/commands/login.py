@@ -67,8 +67,11 @@ def _api_url(uri: str) -> str:
     return f"{parsed.scheme}://{host}"
 
 
+_ACTIVE_STATES = {"ACTIVE", "HIBERNATED"}
+
+
 def _fetch_projects(api_base: str, access_token: str) -> list[dict]:
-    """Fetch the list of projects using the OAuth access token."""
+    """Fetch active/hibernated projects using the OAuth access token."""
     resp = httpx.get(
         f"{api_base}/v0/projects",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -76,7 +79,15 @@ def _fetch_projects(api_base: str, access_token: str) -> list[dict]:
     )
     resp.raise_for_status()
     data = resp.json()
-    return data.get("data", data) if isinstance(data, dict) else data
+    projects = data.get("data", data) if isinstance(data, dict) else data
+    return [p for p in projects if p.get("state", "").upper() in _ACTIVE_STATES]
+
+
+def _format_date(raw: str | None) -> str:
+    """Format an ISO timestamp to a short date string."""
+    if not raw:
+        return ""
+    return raw[:10]  # YYYY-MM-DD
 
 
 def _prompt_project_selection(projects: list[dict]) -> str:
@@ -86,7 +97,15 @@ def _prompt_project_selection(projects: list[dict]) -> str:
     for i, proj in enumerate(projects, 1):
         name = proj.get("name", "unnamed")
         pid = proj.get("id", "")
-        lines += f"\n  [cyan]{i}[/cyan]) {name}  [dim]({pid})[/dim]"
+        desc = proj.get("description", "")
+        state = proj.get("state", "")
+        created = _format_date(proj.get("createdAt"))
+        lines += f"\n  [cyan]{i}[/cyan]) [bold]{name}[/bold]  [dim]({pid})[/dim]"
+        if desc:
+            lines += f"\n     {desc}"
+        details = [s for s in [state, f"created {created}" if created else ""] if s]
+        if details:
+            lines += f"\n     [dim]{' · '.join(details)}[/dim]"
     console.print(Panel(lines, title="Projects", border_style="blue"))
     choice = typer.prompt(f"Enter 1-{len(projects)}").strip()
     try:
