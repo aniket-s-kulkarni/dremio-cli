@@ -30,11 +30,12 @@ console = Console()
 err_console = Console(stderr=True)
 
 
-def _resolve_uri(ctx: typer.Context) -> str:
-    """Resolve the Dremio API URI from CLI flags, config file, or default."""
-    # Check CLI --uri
-    config_path_obj = ctx.obj.get("config_path") if ctx.obj else None
-    # Check if parent set cli_uri
+def _resolve_uri(ctx: typer.Context, explicit_uri: str | None = None) -> str:
+    """Resolve the Dremio API URI from explicit arg, CLI flags, config file, or default."""
+    if explicit_uri:
+        return explicit_uri
+
+    # Check if parent set cli_uri (global --uri flag)
     from drs.cli import _cli_opts
 
     cli_uri = _cli_opts.get("cli_uri")
@@ -42,6 +43,7 @@ def _resolve_uri(ctx: typer.Context) -> str:
         return cli_uri
 
     # Try config file
+    config_path_obj = ctx.obj.get("config_path") if ctx.obj else None
     path: Path = config_path_obj if config_path_obj else DEFAULT_CONFIG_PATH
     if path.exists():
         with path.open() as f:
@@ -74,9 +76,12 @@ def _resolve_project_id(ctx: typer.Context) -> str:
     return typer.prompt("Enter your Dremio Cloud Project ID").strip()
 
 
-def login_command(ctx: typer.Context) -> None:
+def login_command(
+    ctx: typer.Context,
+    uri: str = typer.Option(None, "--uri", "-u", help="Dremio API URL (e.g. https://app.dev.dremio.site)"),
+) -> None:
     """Log in to Dremio Cloud via OAuth (opens your browser)."""
-    uri = _resolve_uri(ctx)
+    uri = _resolve_uri(ctx, explicit_uri=uri)
     console.print(f"\nLogging in to [bold]{uri}[/bold] ...")
 
     try:
@@ -120,8 +125,11 @@ def _update_config_file(config_path: Path, uri: str, project_id: str) -> None:
     config_path.chmod(0o600)
 
 
-def logout_command(ctx: typer.Context) -> None:
+def logout_command(
+    ctx: typer.Context,
+    uri: str = typer.Option(None, "--uri", "-u", help="Dremio API URL to log out from"),
+) -> None:
     """Log out of Dremio Cloud (removes stored OAuth tokens)."""
-    uri = _resolve_uri(ctx)
+    uri = _resolve_uri(ctx, explicit_uri=uri)
     token_store.clear(uri)
     console.print(f"Logged out of [bold]{uri}[/bold]. OAuth tokens removed.")
