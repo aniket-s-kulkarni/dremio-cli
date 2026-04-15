@@ -79,14 +79,20 @@ def discover(dremio_url: str) -> OAuthServerMetadata:
 
 
 def register_client(registration_endpoint: str, redirect_uri: str) -> tuple[str, str | None]:
-    """Dynamic Client Registration. Returns ``(client_id, client_secret)``."""
+    """Dynamic Client Registration. Returns ``(client_id, client_secret)``.
+
+    Returns ``None`` if the server does not support DCR (403/400).
+    """
     body = {
-        "client_id": _CLIENT_ID,
+        "client_name": _CLIENT_ID,
         "redirect_uris": [redirect_uri],
         "grant_types": ["authorization_code", "refresh_token"],
         "response_types": ["code"],
     }
     resp = httpx.post(registration_endpoint, json=body, timeout=30.0)
+    if resp.status_code in (400, 403):
+        logger.info("DCR not available (%s) — using well-known client_id.", resp.status_code)
+        return None, None
     resp.raise_for_status()
     data = resp.json()
     return data["client_id"], data.get("client_secret")
@@ -241,9 +247,10 @@ def run_login_flow(dremio_url: str) -> OAuthTokens:
     port = find_free_port()
     redirect_uri = f"http://localhost:{port}/callback"
 
+    client_id, client_secret = None, None
     if metadata.registration_endpoint:
         client_id, client_secret = register_client(metadata.registration_endpoint, redirect_uri)
-    else:
+    if not client_id:
         client_id, client_secret = _CLIENT_ID, None
 
     code_verifier, code_challenge = generate_pkce()
