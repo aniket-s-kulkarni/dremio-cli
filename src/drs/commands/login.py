@@ -18,10 +18,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
+import httpx
 import typer
 import yaml
 from rich.console import Console
+from rich.panel import Panel
 
 from drs import oauth, token_store
 from drs.auth import DEFAULT_CONFIG_PATH, DEFAULT_URI
@@ -55,8 +58,51 @@ def _resolve_uri(ctx: typer.Context, explicit_uri: str | None = None) -> str:
     return DEFAULT_URI
 
 
-def _resolve_project_id(ctx: typer.Context) -> str:
-    """Resolve project_id from CLI flags, config file, or prompt the user."""
+def _api_url(uri: str) -> str:
+    """Derive the API URL from a Dremio URL (app.X -> api.X)."""
+    parsed = urlparse(uri)
+    host = parsed.hostname or ""
+    if host.startswith("app."):
+        host = "api." + host[4:]
+    return f"{parsed.scheme}://{host}"
+
+
+def _fetch_projects(api_base: str, access_token: str) -> list[dict]:
+    """Fetch the list of projects using the OAuth access token."""
+    resp = httpx.get(
+        f"{api_base}/v0/projects",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data.get("data", data) if isinstance(data, dict) else data
+
+
+def _prompt_project_selection(projects: list[dict]) -> str:
+    """Display a numbered list of projects and let the user choose."""
+    console.print()
+    lines = "[bold]Select a project:[/bold]\n"
+    for i, proj in enumerate(projects, 1):
+        name = proj.get("name", "unnamed")
+        pid = proj.get("id", "")
+        lines += f"\n  [cyan]{i}[/cyan]) {name}  [dim]({pid})[/dim]"
+    console.print(Panel(lines, title="Projects", border_style="blue"))
+    choice = typer.prompt(f"Enter 1-{len(projects)}").strip()
+    try:
+        idx = int(choice) - 1
+        if 0 <= idx < len(projects):
+            selected = projects[idx]
+            console.print(f"  -> [bold]{selected.get('name')}[/bold]")
+            return selected["id"]
+    except (ValueError, KeyError):
+        pass
+    err_console.print("[yellow]Invalid choice — please enter a project ID manually.[/yellow]")
+    return typer.prompt("Enter your Dremio Cloud Project ID").strip()
+
+
+def _resolve_project_id(ctx: typer.Context, uri: str, access_token: str) -> str:
+    """Resolve project_id from CLI flags, config, or interactive project picker."""
     from drs.cli import _cli_opts
 
     cli_project_id = _cli_opts.get("cli_project_id")
@@ -72,8 +118,24 @@ def _resolve_project_id(ctx: typer.Context) -> str:
         if project_id:
             return project_id
 
-    # Prompt user
-    return typer.prompt("Enter your Dremio Cloud Project ID").strip()
+    # Fetch projects and let the user pick
+    api_base = _api_url(uri)
+    try:
+        projects = _fetch_projects(api_base, access_token)
+    except Exception:
+        console.print("[yellow]Could not fetch project list.[/yellow]")
+        return typer.prompt("Enter your Dremio Cloud Project ID").strip()
+
+    if not projects:
+        console.print("[yellow]No projects found in this organization.[/yellow]")
+        return typer.prompt("Enter your Dremio Cloud Project ID").strip()
+
+    if len(projects) == 1:
+        proj = projects[0]
+        console.print(f"  Auto-selected project: [bold]{proj.get('name')}[/bold] ({proj['id']})")
+        return proj["id"]
+
+    return _prompt_project_selection(projects)
 
 
 def login_command(
@@ -91,7 +153,7 @@ def login_command(
         raise typer.Exit(1)
 
     # Ensure we have a project_id to write into the config
-    project_id = _resolve_project_id(ctx)
+    project_id = _resolve_project_id(ctx, uri, tokens.access_token)
 
     token_store.save(uri, tokens)
 

@@ -54,23 +54,53 @@ def test_login_saves_tokens(tmp_path: Path) -> None:
     assert saved_tokens.access_token == "at-new"
 
 
-def test_login_prompts_for_project_id(tmp_path: Path) -> None:
-    """When project_id is not in config, login should prompt for it."""
+def test_login_picks_project_from_list(tmp_path: Path) -> None:
+    """When project_id is not in config, login should show project list."""
     config_path = tmp_path / "config.yaml"
-    # No project_id in config
     config_path.write_text("uri: https://api.dremio.cloud\n")
 
     fake_tokens = OAuthTokens(access_token="at", client_id="cid")
+    fake_projects = [
+        {"id": "proj-aaa", "name": "Alpha"},
+        {"id": "proj-bbb", "name": "Beta"},
+    ]
 
     with (
         patch("drs.commands.login.oauth.run_login_flow", return_value=fake_tokens),
         patch("drs.commands.login.token_store.save"),
         patch("drs.commands.login.DEFAULT_CONFIG_PATH", config_path),
-        patch("drs.commands.login._update_config_file"),
+        patch("drs.commands.login._update_config_file") as mock_update,
+        patch("drs.commands.login._fetch_projects", return_value=fake_projects),
     ):
-        result = runner.invoke(app, ["--config", str(config_path), "login"], input="my-project-id\n")
+        result = runner.invoke(app, ["--config", str(config_path), "login"], input="2\n")
 
     assert result.exit_code == 0
+    assert "Beta" in result.output
+    mock_update.assert_called_once()
+    assert mock_update.call_args[0][2] == "proj-bbb"
+
+
+def test_login_auto_selects_single_project(tmp_path: Path) -> None:
+    """When only one project exists, auto-select it."""
+    config_path = tmp_path / "config.yaml"
+    config_path.write_text("uri: https://api.dremio.cloud\n")
+
+    fake_tokens = OAuthTokens(access_token="at", client_id="cid")
+    fake_projects = [{"id": "proj-only", "name": "OnlyProject"}]
+
+    with (
+        patch("drs.commands.login.oauth.run_login_flow", return_value=fake_tokens),
+        patch("drs.commands.login.token_store.save"),
+        patch("drs.commands.login.DEFAULT_CONFIG_PATH", config_path),
+        patch("drs.commands.login._update_config_file") as mock_update,
+        patch("drs.commands.login._fetch_projects", return_value=fake_projects),
+    ):
+        result = runner.invoke(app, ["--config", str(config_path), "login"])
+
+    assert result.exit_code == 0
+    assert "OnlyProject" in result.output
+    mock_update.assert_called_once()
+    assert mock_update.call_args[0][2] == "proj-only"
 
 
 def test_logout_clears_tokens(tmp_path: Path) -> None:
