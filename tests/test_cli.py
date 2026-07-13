@@ -17,6 +17,9 @@
 
 from __future__ import annotations
 
+import json
+from unittest.mock import AsyncMock
+
 from typer.testing import CliRunner
 
 from drs import __version__
@@ -41,3 +44,102 @@ def test_help_short_flag() -> None:
     result = runner.invoke(app, ["-h"])
     assert result.exit_code == 0
     assert f"(version {__version__})" in result.output
+
+
+def test_chat_gantt_command(tmp_path) -> None:
+    dump_path = tmp_path / "history.json"
+    dump_path.write_text(
+        json.dumps(
+            {
+                "data": [
+                    {
+                        "chunkType": "toolRequest",
+                        "callId": "c1",
+                        "name": "searchViewsAndTables",
+                        "createdAt": "2026-07-13T12:39:29.860Z",
+                        "arguments": {"arg0": "supplier contract risk exposure"},
+                    },
+                    {
+                        "chunkType": "toolResponse",
+                        "callId": "c1",
+                        "name": "searchViewsAndTables",
+                        "createdAt": "2026-07-13T12:39:32.719Z",
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["chat", "gantt", str(dump_path), "--ascii", "--width", "20"])
+
+    assert result.exit_code == 0
+    assert "Timeline start: 2026-07-13T12:39:29.860000+00:00" in result.output
+    assert "S1 searchViewsAndTables" in result.output
+
+
+def test_chat_history_gantt_command(monkeypatch) -> None:
+    from drs.commands import chat
+
+    client = type("DummyClient", (), {"close": AsyncMock()})()
+    monkeypatch.setattr(chat, "_get_client", lambda: client)
+
+    async def fake_get_messages(client, conversation_id, limit=50):
+        return {
+            "data": [
+                {
+                    "chunkType": "toolRequest",
+                    "callId": "c1",
+                    "name": "searchViewsAndTables",
+                    "createdAt": "2026-07-13T12:39:29.860Z",
+                    "arguments": {"arg0": "supplier contract risk exposure"},
+                },
+                {
+                    "chunkType": "toolResponse",
+                    "callId": "c1",
+                    "name": "searchViewsAndTables",
+                    "createdAt": "2026-07-13T12:39:32.719Z",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(chat, "get_messages", fake_get_messages)
+
+    result = runner.invoke(app, ["chat", "history", "conv-1", "--gantt", "--ascii", "--think-time"])
+
+    assert result.exit_code == 0
+    assert "Timeline start: 2026-07-13T12:39:29.860000+00:00" in result.output
+    assert "S1 searchViewsAndTables" in result.output
+
+
+def test_chat_history_gantt_command_accepts_messages_envelope(monkeypatch) -> None:
+    from drs.commands import chat
+
+    client = type("DummyClient", (), {"close": AsyncMock()})()
+    monkeypatch.setattr(chat, "_get_client", lambda: client)
+
+    async def fake_get_messages(client, conversation_id, limit=50):
+        return {
+            "messages": [
+                {
+                    "chunkType": "toolRequest",
+                    "callId": "c1",
+                    "name": "searchViewsAndTables",
+                    "createdAt": "2026-07-13T12:39:29.860Z",
+                    "arguments": {"arg0": "supplier contract risk exposure"},
+                },
+                {
+                    "chunkType": "toolResponse",
+                    "callId": "c1",
+                    "name": "searchViewsAndTables",
+                    "createdAt": "2026-07-13T12:39:32.719Z",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(chat, "get_messages", fake_get_messages)
+
+    result = runner.invoke(app, ["chat", "history", "conv-1", "--gantt", "--ascii"])
+
+    assert result.exit_code == 0
+    assert "S1 searchViewsAndTables" in result.output
