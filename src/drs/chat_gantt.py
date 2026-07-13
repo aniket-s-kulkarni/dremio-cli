@@ -40,6 +40,8 @@ class ToolSpan:
     arguments: dict[str, Any] | None
     title: str | None
     summarized_title: str | None
+    failed: bool
+    error_message: str | None
 
 
 @dataclass
@@ -78,6 +80,14 @@ def load_history_dump(path: Path) -> dict[str, Any]:
     return {"data": rows}
 
 
+def extract_history_rows(data: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize history rows across dump and API payload shapes."""
+    rows = data.get("data", data.get("messages", []))
+    if not isinstance(rows, list):
+        raise ValueError("Expected top-level 'data' or 'messages' list in chat history dump")
+    return rows
+
+
 def summarize_tool_arguments(arguments: Any) -> str:
     """Return a compact single-line argument summary for chart labels."""
     if not isinstance(arguments, dict) or not arguments:
@@ -91,6 +101,53 @@ def summarize_tool_arguments(arguments: Any) -> str:
         if len(parts) >= 2:
             break
     return ", ".join(parts)
+
+
+def _stringify_error(value: Any) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        return text or None
+    if isinstance(value, dict):
+        for key in ("message", "error", "errorMessage", "detail", "details"):
+            nested = _stringify_error(value.get(key))
+            if nested:
+                return nested
+        for nested_value in value.values():
+            nested = _stringify_error(nested_value)
+            if nested:
+                return nested
+        return None
+    if isinstance(value, list):
+        parts = [_stringify_error(item) for item in value]
+        parts = [part for part in parts if part]
+        return "; ".join(parts) if parts else None
+    return str(value)
+
+
+def extract_tool_error(row: dict[str, Any]) -> tuple[bool, str | None]:
+    """Best-effort extraction of tool failure state from a toolResponse row."""
+    status = str(row.get("status", "")).strip().lower()
+    result = row.get("result")
+
+    for key in ("error", "errorMessage", "message"):
+        direct_error = _stringify_error(row.get(key))
+        if direct_error:
+            return True, direct_error
+
+    nested_error = _stringify_error(result)
+    if isinstance(result, dict):
+        if any(key in result for key in ("error", "errorMessage", "message", "detail", "details")) and nested_error:
+            return True, nested_error
+        result_status = str(result.get("status", "")).strip().lower()
+        if result_status in {"error", "failed", "failure", "cancelled", "canceled"}:
+            return True, nested_error or result_status
+
+    if status in {"error", "failed", "failure", "cancelled", "canceled"}:
+        return True, nested_error or status
+
+    return False, None
 
 
 def truncate_label(label: str, limit: int) -> str:
@@ -143,6 +200,8 @@ def _with_think_time(spans: list[ToolSpan], min_gap_ms: int = 5) -> list[ToolSpa
                 arguments=None,
                 title=None,
                 summarized_title=None,
+                failed=False,
+                error_message=None,
             )
         )
 
@@ -164,7 +223,7 @@ def build_tool_spans(
 ) -> tuple[list[ToolSpan], datetime | None, datetime | None]:
     """Build timed tool spans and assign each to a visual lane."""
     pending: dict[str, dict[str, Any]] = {}
-    tool_rows: list[tuple[datetime, datetime, str, str, str, dict[str, Any] | None, str | None, str | None]] = []
+    tool_rows: list[tuple[datetime, datetime, str, str, str, dict[str, Any] | None, str | None, str | None, bool, str | None]] = []
     current_title: str | None = None
 
     for row in rows:
@@ -199,6 +258,7 @@ def build_tool_spans(
             start_info = pending.pop(call_id)
             start = start_info["start"]
             end = timestamp if timestamp >= start else start
+            failed, error_message = extract_tool_error(row)
             tool_rows.append(
                 (
                     start,
@@ -209,6 +269,8 @@ def build_tool_spans(
                     start_info["arguments"],
                     start_info["title"],
                     start_info["summarized_title"],
+                    failed,
+                    error_message,
                 )
             )
 
@@ -223,7 +285,7 @@ def build_tool_spans(
     current_step_end: datetime | None = None
     spans: list[ToolSpan] = []
 
-    for start, end, name, call_id, label, arguments, title, summarized_title in tool_rows:
+    for start, end, name, call_id, label, arguments, title, summarized_title, failed, error_message in tool_rows:
         if current_step_end is None or start >= current_step_end:
             current_step += 1
             current_step_end = end
@@ -254,6 +316,8 @@ def build_tool_spans(
                 arguments=arguments,
                 title=title,
                 summarized_title=summarized_title,
+                failed=failed,
+                error_message=error_message,
             )
         )
 
@@ -279,9 +343,7 @@ def render_tool_gantt(
     min_think_time_ms: int = 5,
 ) -> str:
     """Render tool calls from a chat history dump as an ASCII Gantt chart."""
-    rows = data.get("data", [])
-    if not isinstance(rows, list):
-        raise ValueError("Expected top-level 'data' list in chat history dump")
+    rows = extract_history_rows(data)
 
     history_bounds = build_history_bounds(rows)
     spans, first_start, last_end = build_tool_spans(

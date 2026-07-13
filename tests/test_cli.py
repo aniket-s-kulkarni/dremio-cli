@@ -110,3 +110,36 @@ def test_chat_history_gantt_command(monkeypatch) -> None:
     assert result.exit_code == 0
     assert "Timeline start: 2026-07-13T12:39:29.860000+00:00" in result.output
     assert "S1 searchViewsAndTables" in result.output
+
+
+def test_chat_history_gantt_command_accepts_messages_envelope(monkeypatch) -> None:
+    from drs.commands import chat
+
+    client = type("DummyClient", (), {"close": AsyncMock()})()
+    monkeypatch.setattr(chat, "_get_client", lambda: client)
+
+    async def fake_get_messages(client, conversation_id, limit=50):
+        return {
+            "messages": [
+                {
+                    "chunkType": "toolRequest",
+                    "callId": "c1",
+                    "name": "searchViewsAndTables",
+                    "createdAt": "2026-07-13T12:39:29.860Z",
+                    "arguments": {"arg0": "supplier contract risk exposure"},
+                },
+                {
+                    "chunkType": "toolResponse",
+                    "callId": "c1",
+                    "name": "searchViewsAndTables",
+                    "createdAt": "2026-07-13T12:39:32.719Z",
+                },
+            ]
+        }
+
+    monkeypatch.setattr(chat, "get_messages", fake_get_messages)
+
+    result = runner.invoke(app, ["chat", "history", "conv-1", "--gantt", "--ascii"])
+
+    assert result.exit_code == 0
+    assert "S1 searchViewsAndTables" in result.output

@@ -28,6 +28,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.containers import Horizontal, ScrollableContainer, Vertical
 from textual.reactive import reactive
+from textual.screen import ModalScreen
 from textual.widgets import DataTable, Footer, Header, Static
 
 from drs.chat_gantt import (
@@ -35,6 +36,7 @@ from drs.chat_gantt import (
     ToolSpan,
     build_history_bounds,
     build_tool_spans,
+    extract_history_rows,
     format_duration_ms,
     load_history_dump,
     truncate_label,
@@ -68,6 +70,14 @@ def _duration_color(duration_ms: int, total_ms: int) -> str:
     return "red"
 
 
+def _span_marker(span: ToolSpan) -> tuple[str, str]:
+    if span.failed:
+        return "●", "red"
+    if span.name == "thinkTime":
+        return "•", "bright_black"
+    return "●", "green"
+
+
 def _tool_time_ms(spans: list[ToolSpan]) -> int:
     return sum(span.duration_ms for span in spans if span.name != "thinkTime")
 
@@ -78,6 +88,45 @@ def _think_time_ms(spans: list[ToolSpan]) -> int:
 
 def _tool_call_count(spans: list[ToolSpan]) -> int:
     return sum(1 for span in spans if span.name != "thinkTime")
+
+
+def _build_span_sections(span: ToolSpan, timeline: "ToolTimeline") -> list[RenderableType]:
+    body = Text()
+    if span.name == "thinkTime":
+        body.append("Tool: think time\n", style="dim")
+    else:
+        body.append(f"Tool: {span.name}\n", style="bold")
+    if span.failed:
+        body.append("Status: failed\n", style="bold red")
+    elif span.name != "thinkTime":
+        body.append("Status: success\n", style="green")
+    if span.title:
+        body.append(f"Title: {span.title}\n")
+    if span.summarized_title:
+        body.append(f"Summary: {span.summarized_title}\n")
+    body.append(f"Step: {span.step}\n")
+    body.append(f"Call ID: {span.call_id}\n")
+    body.append(f"Start: {span.start.isoformat()}\n")
+    body.append(f"End:   {span.end.isoformat()}\n")
+    if span.name == "thinkTime":
+        body.append(f"Think time: {format_duration_ms(span.duration_ms)}\n", style="dim")
+    else:
+        body.append(f"Offset: {format_duration_ms(span.offset_ms)}\n")
+        body.append(f"Duration: {format_duration_ms(span.duration_ms)}\n")
+    body.append(f"Label: {span.label}\n", style="dim" if span.name == "thinkTime" else "")
+    body.append(
+        f"Run total: {format_duration_ms(timeline.history_bounds.total_ms)} "
+        f"({timeline.history_bounds.start.isoformat()} -> "
+        f"{timeline.history_bounds.end.isoformat()})\n"
+    )
+    sections: list[RenderableType] = [body]
+    if span.arguments:
+        sections.extend([Text("\nArguments:", style="bold"), Pretty(span.arguments, expand_all=True)])
+    else:
+        body.append("Arguments: (none)\n")
+    if span.error_message:
+        sections.extend([Text("\nError:", style="bold red"), Pretty(span.error_message, expand_all=True)])
+    return sections
 
 
 @dataclass
@@ -111,9 +160,7 @@ def load_tool_timeline_data(
     min_think_time_ms: int = 5,
 ) -> ToolTimeline:
     """Load and validate timeline data from an in-memory history dump."""
-    rows = data.get("data", [])
-    if not isinstance(rows, list):
-        raise ValueError("Expected top-level 'data' list in chat history dump")
+    rows = extract_history_rows(data)
     history_bounds = build_history_bounds(rows)
     spans, start, end = build_tool_spans(
         rows,
@@ -150,6 +197,8 @@ class GanttChart(Static):
         chart_lines.append(Text("".join(labels), style="dim"))
         chart_lines.append(Text("".join(markers), style="dim"))
         legend = Text("Legend: ", style="bold")
+        legend.append("● error  ", style="red")
+        legend.append("● success  ", style="green")
         legend.append("■ think time  ", style="bright_black")
         legend.append("■ short (<5%)  ", style="green")
         legend.append("■ medium (5-15%)  ", style="yellow")
@@ -187,7 +236,7 @@ class GanttRows(Static):
             start_col = min((span.offset_ms * width) // self.timeline.total_ms, width - 1)
             end_col = max(((span.offset_ms + span.duration_ms) * width) // self.timeline.total_ms, start_col + 1)
             end_col = min(end_col, width)
-            color = "bright_black" if span.name == "thinkTime" else _duration_color(span.duration_ms, self.timeline.total_ms)
+            color = "red" if span.failed else "bright_black" if span.name == "thinkTime" else _duration_color(span.duration_ms, self.timeline.total_ms)
             bar_style = f"bold {color}" if span.call_id == self.selected_call_id else color
             selected = span.call_id == self.selected_call_id
             line_style = "reverse bold" if selected else ""
@@ -196,9 +245,11 @@ class GanttRows(Static):
                 fill[idx] = "█"
             if end_col - start_col == 1:
                 fill[start_col] = "◆"
+            marker, marker_style = _span_marker(span)
             bar.append(("▶ " if selected else "  "), style="bold yellow" if selected else "")
             bar.append(f"Step {span.step}".ljust(ROW_LABEL_WIDTH), style=f"bold {line_style}".strip())
-            bar.append(truncate_label(span.label, label_width).ljust(label_width), style=f"white {line_style}".strip())
+            bar.append(f"{marker} ", style=f"{marker_style} {line_style}".strip())
+            bar.append(truncate_label(span.label, label_width - 2).ljust(label_width), style=f"white {line_style}".strip())
             bar.append(" ", style=line_style)
             bar.append("".join(fill), style=bar_style)
             bar.append(f"  {format_duration_ms(span.duration_ms)}", style=f"dim {line_style}".strip())
@@ -248,41 +299,58 @@ class ToolDetails(Static):
         )
 
     def show_span(self, span: ToolSpan) -> None:
-        body = Text()
-        if span.name == "thinkTime":
-            body.append("Tool: think time\n", style="dim")
-        else:
-            body.append(f"Tool: {span.name}\n", style="bold")
-        if span.title:
-            body.append(f"Title: {span.title}\n")
-        if span.summarized_title:
-            body.append(f"Summary: {span.summarized_title}\n")
-        body.append(f"Step: {span.step}\n")
-        body.append(f"Call ID: {span.call_id}\n")
-        body.append(f"Start: {span.start.isoformat()}\n")
-        body.append(f"End:   {span.end.isoformat()}\n")
-        if span.name == "thinkTime":
-            body.append(f"Think time: {format_duration_ms(span.duration_ms)}\n", style="dim")
-        else:
-            body.append(f"Offset: {format_duration_ms(span.offset_ms)}\n")
-            body.append(f"Duration: {format_duration_ms(span.duration_ms)}\n")
-        body.append(f"Label: {span.label}\n", style="dim" if span.name == "thinkTime" else "")
-        body.append(
-            f"Run total: {format_duration_ms(self.app.timeline.history_bounds.total_ms)} "
-            f"({self.app.timeline.history_bounds.start.isoformat()} -> "
-            f"{self.app.timeline.history_bounds.end.isoformat()})\n"
-        )
-        if span.arguments:
-            self.update(
+        sections = _build_span_sections(span, self.app.timeline)
+        self.update(Panel(Group(*sections), title="Selection", border_style="green"))
+
+
+class ToolDetailModal(ModalScreen[None]):
+    """Full-screen-ish modal for the selected tool span."""
+
+    CSS = """
+    ToolDetailModal {
+        align: center middle;
+    }
+    #detail-modal {
+        width: 88%;
+        height: 88%;
+        border: round $accent;
+        background: $surface;
+        padding: 1 2;
+    }
+    #detail-modal-body {
+        height: 1fr;
+        width: 1fr;
+    }
+    """
+
+    BINDINGS = [
+        ("escape", "dismiss_modal", "Close"),
+        ("q", "dismiss_modal", "Close"),
+        ("enter", "dismiss_modal", "Close"),
+    ]
+
+    def __init__(self, span: ToolSpan, timeline: "ToolTimeline") -> None:
+        super().__init__()
+        self.span = span
+        self.timeline = timeline
+
+    def compose(self) -> ComposeResult:
+        title = "Tool Call Details" if self.span.name != "thinkTime" else "Think Time Details"
+        yield ScrollableContainer(
+            Static(
                 Panel(
-                    Group(body, Text("\nArguments:", style="bold"), Pretty(span.arguments, expand_all=True)),
-                    title="Selection",
-                    border_style="green",
-                )
-            )
-            return
-        body.append("Arguments: (none)")
-        self.update(Panel(body, title="Selection", border_style="green"))
+                    Group(*_build_span_sections(self.span, self.timeline)),
+                    title=title,
+                    subtitle="Esc/Enter/q closes",
+                    border_style="green" if not self.span.failed else "red",
+                ),
+                id="detail-modal-body",
+            ),
+            id="detail-modal",
+        )
+
+    def action_dismiss_modal(self) -> None:
+        self.dismiss()
 
 
 class ChatGanttApp(App[None]):
@@ -351,19 +419,21 @@ class ChatGanttApp(App[None]):
         table = self.query_one("#spans", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
+        table.can_focus = True
         table.add_columns("Step", "Tool", "Offset", "Duration")
         for span in self.timeline.spans:
             tool_cell: str | Text
             offset_cell: str | Text
             duration_cell: str | Text
             if span.name == "thinkTime":
-                tool_cell = Text("think time", style="dim")
+                tool_cell = Text.assemble(("• ", "bright_black"), ("think time", "dim"))
                 offset_cell = Text("", style="dim")
                 duration_cell = Text(format_duration_ms(span.duration_ms), style="dim")
             else:
-                tool_cell = truncate_label(span.name, 24)
+                marker, marker_style = _span_marker(span)
+                tool_cell = Text.assemble((f"{marker} ", marker_style), (truncate_label(span.name, 22), "red" if span.failed else ""))
                 offset_cell = format_duration_ms(span.offset_ms)
-                duration_cell = format_duration_ms(span.duration_ms)
+                duration_cell = Text(format_duration_ms(span.duration_ms), style="red" if span.failed else "")
             table.add_row(
                 str(span.step),
                 tool_cell,
@@ -392,8 +462,7 @@ class ChatGanttApp(App[None]):
                 border_style="cyan",
             )
         )
-        chart_scroll = self.query_one("#chart-scroll", ChartViewport)
-        chart_scroll.focus()
+        table.focus()
         self._highlight_selected_span()
 
     def action_cursor_up(self) -> None:
@@ -407,8 +476,7 @@ class ChatGanttApp(App[None]):
             self._highlight_selected_span()
 
     def action_open_details(self) -> None:
-        details = self.query_one("#details", ToolDetails)
-        details.show_span(self.timeline.spans[self.selected_index])
+        self.push_screen(ToolDetailModal(self.timeline.spans[self.selected_index], self.timeline))
 
     def action_pan_left(self) -> None:
         chart_header_scroll = self.query_one("#chart-header-scroll", ScrollableContainer)
@@ -428,8 +496,23 @@ class ChatGanttApp(App[None]):
         chart_rows.selected_call_id = span.call_id
         table = self.query_one("#spans", DataTable)
         table.move_cursor(row=self.selected_index, column=0)
+        details = self.query_one("#details", ToolDetails)
+        details.show_span(span)
         chart_scroll = self.query_one("#chart-scroll", ChartViewport)
         chart_scroll.scroll_to(y=max(self.selected_index, 0), animate=False, force=True)
+
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if event.control.id != "spans" or event.cursor_row is None:
+            return
+        self.selected_index = event.cursor_row
+        self._highlight_selected_span()
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.control.id != "spans" or event.cursor_row is None:
+            return
+        self.selected_index = event.cursor_row
+        self._highlight_selected_span()
+        self.action_open_details()
 
 
 def run_chat_gantt_tui(path: Path, *, include_think_time: bool = False, min_think_time_ms: int = 5) -> None:
