@@ -237,7 +237,13 @@ class GanttRows(Static):
             start_col = min((span.offset_ms * width) // self.timeline.total_ms, width - 1)
             end_col = max(((span.offset_ms + span.duration_ms) * width) // self.timeline.total_ms, start_col + 1)
             end_col = min(end_col, width)
-            color = "red" if span.failed else "bright_black" if span.name == "thinkTime" else _duration_color(span.duration_ms, self.timeline.total_ms)
+            color = (
+                "red"
+                if span.failed
+                else "bright_black"
+                if span.name == "thinkTime"
+                else _duration_color(span.duration_ms, self.timeline.total_ms)
+            )
             bar_style = f"bold {color}" if span.call_id == self.selected_call_id else color
             selected = span.call_id == self.selected_call_id
             line_style = "reverse bold" if selected else ""
@@ -250,7 +256,9 @@ class GanttRows(Static):
             bar.append(("▶ " if selected else "  "), style="bold yellow" if selected else "")
             bar.append(f"Step {span.step}".ljust(ROW_LABEL_WIDTH), style=f"bold {line_style}".strip())
             bar.append(f"{marker} ", style=f"{marker_style} {line_style}".strip())
-            bar.append(truncate_label(span.label, label_width - 2).ljust(label_width), style=f"white {line_style}".strip())
+            bar.append(
+                truncate_label(span.label, label_width - 2).ljust(label_width), style=f"white {line_style}".strip()
+            )
             bar.append(" ", style=line_style)
             bar.append("".join(fill), style=bar_style)
             bar.append(f"  {format_duration_ms(span.duration_ms)}", style=f"dim {line_style}".strip())
@@ -432,7 +440,9 @@ class ChatGanttApp(App[None]):
                 duration_cell = Text(format_duration_ms(span.duration_ms), style="dim")
             else:
                 marker, marker_style = _span_marker(span)
-                tool_cell = Text.assemble((f"{marker} ", marker_style), (truncate_label(span.name, 22), "red" if span.failed else ""))
+                tool_cell = Text.assemble(
+                    (f"{marker} ", marker_style), (truncate_label(span.name, 22), "red" if span.failed else "")
+                )
                 offset_cell = format_duration_ms(span.offset_ms)
                 duration_cell = Text(format_duration_ms(span.duration_ms), style="red" if span.failed else "")
             table.add_row(

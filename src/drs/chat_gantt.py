@@ -161,11 +161,7 @@ def truncate_label(label: str, limit: int) -> str:
 
 def build_history_bounds(rows: list[dict]) -> HistoryBounds | None:
     """Compute overall elapsed time across all timestamped events."""
-    timestamps = [
-        parse_timestamp(str(created_at))
-        for row in rows
-        if (created_at := row.get("createdAt"))
-    ]
+    timestamps = [parse_timestamp(str(created_at)) for row in rows if (created_at := row.get("createdAt"))]
     if not timestamps:
         return None
     return HistoryBounds(start=min(timestamps), end=max(timestamps))
@@ -224,7 +220,9 @@ def build_tool_spans(
 ) -> tuple[list[ToolSpan], datetime | None, datetime | None]:
     """Build timed tool spans and assign each to a visual lane."""
     pending: dict[str, dict[str, Any]] = {}
-    tool_rows: list[tuple[datetime, datetime, str, str, str, dict[str, Any] | None, str | None, str | None, bool, str | None]] = []
+    tool_rows: list[
+        tuple[datetime, datetime, str, str, str, dict[str, Any] | None, str | None, str | None, bool, str | None]
+    ] = []
     current_title: str | None = None
 
     for row in rows:

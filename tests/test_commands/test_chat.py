@@ -379,13 +379,23 @@ def test_build_span_sections_includes_error_details() -> None:
         start=build_tool_spans(
             [
                 {"chunkType": "toolRequest", "callId": "c1", "name": "runSql", "createdAt": "2026-07-13T12:39:29.860Z"},
-                {"chunkType": "toolResponse", "callId": "c1", "name": "runSql", "createdAt": "2026-07-13T12:39:32.719Z"},
+                {
+                    "chunkType": "toolResponse",
+                    "callId": "c1",
+                    "name": "runSql",
+                    "createdAt": "2026-07-13T12:39:32.719Z",
+                },
             ]
         )[1],
         end=build_tool_spans(
             [
                 {"chunkType": "toolRequest", "callId": "c1", "name": "runSql", "createdAt": "2026-07-13T12:39:29.860Z"},
-                {"chunkType": "toolResponse", "callId": "c1", "name": "runSql", "createdAt": "2026-07-13T12:39:32.719Z"},
+                {
+                    "chunkType": "toolResponse",
+                    "callId": "c1",
+                    "name": "runSql",
+                    "createdAt": "2026-07-13T12:39:32.719Z",
+                },
             ]
         )[2],
         duration_ms=2859,

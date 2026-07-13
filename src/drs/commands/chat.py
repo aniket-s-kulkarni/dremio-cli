@@ -663,9 +663,17 @@ def chat_list(
 def chat_history(
     conversation_id: str = typer.Argument(help="Conversation ID"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum messages to return"),
-    gantt: bool = typer.Option(False, "--gantt", help="Render the history as a Gantt timeline instead of transcript output"),
-    think_time: bool = typer.Option(False, "--think-time", help="With --gantt, include synthetic think-time gaps between steps when the gap exceeds 5 ms"),
-    ascii: bool = typer.Option(False, "--ascii", help="With --gantt, render plain ASCII output instead of launching the Textual TUI"),
+    gantt: bool = typer.Option(
+        False, "--gantt", help="Render the history as a Gantt timeline instead of transcript output"
+    ),
+    think_time: bool = typer.Option(
+        False,
+        "--think-time",
+        help="With --gantt, include synthetic think-time gaps between steps when the gap exceeds 5 ms",
+    ),
+    ascii: bool = typer.Option(
+        False, "--ascii", help="With --gantt, render plain ASCII output instead of launching the Textual TUI"
+    ),
     fmt: ChatFormat = typer.Option(ChatFormat.table, "--format", "-f", help="Output format: json, table"),
 ) -> None:
     """Show message history for a conversation."""
@@ -700,7 +708,9 @@ def chat_history(
 @app.command("gantt")
 def chat_gantt(
     dump_file: Path = typer.Argument(exists=True, dir_okay=False, readable=True, help="Path to chat history dump JSON"),
-    think_time: bool = typer.Option(False, "--think-time", help="Include synthetic think-time gaps between steps when the gap exceeds 5 ms"),
+    think_time: bool = typer.Option(
+        False, "--think-time", help="Include synthetic think-time gaps between steps when the gap exceeds 5 ms"
+    ),
     ascii: bool = typer.Option(False, "--ascii", help="Render plain ASCII output instead of launching the Textual TUI"),
     width: int = typer.Option(60, "--width", "-w", min=20, help="Chart width in characters"),
 ) -> None:
