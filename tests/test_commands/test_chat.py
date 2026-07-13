@@ -22,9 +22,23 @@ from unittest.mock import AsyncMock
 import pytest
 from rich.console import Console
 
-from drs.chat_gantt import ToolSpan, build_history_bounds, build_tool_spans, extract_history_rows, load_history_dump, render_tool_gantt
+from drs.chat_gantt import (
+    ToolSpan,
+    build_history_bounds,
+    build_tool_spans,
+    extract_history_rows,
+    load_history_dump,
+    render_tool_gantt,
+)
 from drs.chat_gantt_tui import ToolTimeline, _build_span_sections
-from drs.commands.chat import cancel_run, create_conversation, delete_conversation, get_messages, list_conversations, send_message
+from drs.commands.chat import (
+    cancel_run,
+    create_conversation,
+    delete_conversation,
+    get_messages,
+    list_conversations,
+    send_message,
+)
 
 
 @pytest.mark.asyncio

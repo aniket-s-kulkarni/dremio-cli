@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -182,7 +183,7 @@ def _with_think_time(spans: list[ToolSpan], min_gap_ms: int = 5) -> list[ToolSpa
 
     extra_spans: list[ToolSpan] = []
     next_lane = max(span.lane for span in spans) + 1
-    for (step, _step_start, step_end), (next_step, next_start, _next_end) in zip(step_bounds, step_bounds[1:]):
+    for (step, _step_start, step_end), (next_step, next_start, _next_end) in pairwise(step_bounds):
         gap_ms = int((next_start - step_end).total_seconds() * 1000)
         if gap_ms <= min_gap_ms:
             continue

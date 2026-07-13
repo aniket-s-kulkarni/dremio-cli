@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import ClassVar
 
 from rich.console import Group, RenderableType
 from rich.panel import Panel
@@ -90,7 +91,7 @@ def _tool_call_count(spans: list[ToolSpan]) -> int:
     return sum(1 for span in spans if span.name != "thinkTime")
 
 
-def _build_span_sections(span: ToolSpan, timeline: "ToolTimeline") -> list[RenderableType]:
+def _build_span_sections(span: ToolSpan, timeline: ToolTimeline) -> list[RenderableType]:
     body = Text()
     if span.name == "thinkTime":
         body.append("Tool: think time\n", style="dim")
@@ -262,7 +263,7 @@ class ChartViewport(ScrollableContainer):
     """Scrollable, focusable viewport for the Gantt chart."""
 
     can_focus = True
-    BINDINGS = [
+    BINDINGS: ClassVar = [
         ("up", "cursor_up", "Up"),
         ("down", "cursor_down", "Down"),
         ("left", "pan_left", "Pan Left"),
@@ -323,13 +324,13 @@ class ToolDetailModal(ModalScreen[None]):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar = [
         ("escape", "dismiss_modal", "Close"),
         ("q", "dismiss_modal", "Close"),
         ("enter", "dismiss_modal", "Close"),
     ]
 
-    def __init__(self, span: ToolSpan, timeline: "ToolTimeline") -> None:
+    def __init__(self, span: ToolSpan, timeline: ToolTimeline) -> None:
         super().__init__()
         self.span = span
         self.timeline = timeline
@@ -387,7 +388,7 @@ class ChatGanttApp(App[None]):
     }
     """
 
-    BINDINGS = [
+    BINDINGS: ClassVar = [
         ("up", "cursor_up", "Up"),
         ("down", "cursor_down", "Down"),
         ("left", "pan_left", "Pan Left"),
