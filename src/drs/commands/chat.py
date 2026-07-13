@@ -37,6 +37,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
+from drs.chat_gantt import load_history_dump, render_tool_gantt
 from drs.chat_render import ChatRenderer, PlainRenderer
 from drs.client import DremioClient
 from drs.output import error as print_error
@@ -662,6 +663,9 @@ def chat_list(
 def chat_history(
     conversation_id: str = typer.Argument(help="Conversation ID"),
     limit: int = typer.Option(50, "--limit", "-n", help="Maximum messages to return"),
+    gantt: bool = typer.Option(False, "--gantt", help="Render the history as a Gantt timeline instead of transcript output"),
+    think_time: bool = typer.Option(False, "--think-time", help="With --gantt, include synthetic think-time gaps between steps when the gap exceeds 5 ms"),
+    ascii: bool = typer.Option(False, "--ascii", help="With --gantt, render plain ASCII output instead of launching the Textual TUI"),
     fmt: ChatFormat = typer.Option(ChatFormat.table, "--format", "-f", help="Output format: json, table"),
 ) -> None:
     """Show message history for a conversation."""
@@ -678,7 +682,41 @@ def chat_history(
     except DremioAPIError as exc:
         print_error(str(exc))
         raise typer.Exit(1)
+    if gantt:
+        try:
+            if ascii:
+                print(render_tool_gantt(result, include_think_time=think_time))
+            else:
+                from drs.chat_gantt_tui import run_chat_gantt_tui_data
+
+                run_chat_gantt_tui_data(result, include_think_time=think_time)
+            return
+        except ValueError as exc:
+            print_error(f"Unable to render Gantt chart: {exc}")
+            raise typer.Exit(1)
     _chat_output(result, fmt)
+
+
+@app.command("gantt")
+def chat_gantt(
+    dump_file: Path = typer.Argument(exists=True, dir_okay=False, readable=True, help="Path to chat history dump JSON"),
+    think_time: bool = typer.Option(False, "--think-time", help="Include synthetic think-time gaps between steps when the gap exceeds 5 ms"),
+    ascii: bool = typer.Option(False, "--ascii", help="Render plain ASCII output instead of launching the Textual TUI"),
+    width: int = typer.Option(60, "--width", "-w", min=20, help="Chart width in characters"),
+) -> None:
+    """Render a Gantt chart from a chat history dump."""
+    try:
+        if ascii:
+            data = load_history_dump(dump_file)
+            print(render_tool_gantt(data, width=width, include_think_time=think_time))
+            return
+
+        from drs.chat_gantt_tui import run_chat_gantt_tui
+
+        run_chat_gantt_tui(dump_file, include_think_time=think_time)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print_error(f"Unable to render Gantt chart: {exc}")
+        raise typer.Exit(1)
 
 
 @app.command("delete")

@@ -21,14 +21,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from drs.commands.chat import (
-    cancel_run,
-    create_conversation,
-    delete_conversation,
-    get_messages,
-    list_conversations,
-    send_message,
-)
+from drs.chat_gantt import build_history_bounds, build_tool_spans, load_history_dump, render_tool_gantt
+from drs.commands.chat import cancel_run, create_conversation, delete_conversation, get_messages, list_conversations, send_message
 
 
 @pytest.mark.asyncio
@@ -113,3 +107,164 @@ async def test_cancel_run(mock_client) -> None:
     result = await cancel_run(mock_client, "conv-1", "run-1")
     mock_client.cancel_conversation_run.assert_called_once_with("conv-1", "run-1")
     assert result["status"] == "ok"
+
+
+def test_build_tool_spans_assigns_parallel_lanes() -> None:
+    rows = [
+        {
+            "chunkType": "model",
+            "createdAt": "2026-07-13T12:39:29.847Z",
+            "result": {
+                "title": "Supplier Contract Risk Exposure",
+            },
+        },
+        {
+            "chunkType": "toolRequest",
+            "callId": "c1",
+            "name": "searchViewsAndTables",
+            "createdAt": "2026-07-13T12:39:29.860Z",
+            "arguments": {"arg0": "supplier contract risk exposure"},
+            "summarizedTitle": "Search supplier contract risk exposure",
+        },
+        {
+            "chunkType": "toolRequest",
+            "callId": "c2",
+            "name": "searchViewsAndTables",
+            "createdAt": "2026-07-13T12:39:29.900Z",
+            "arguments": {"arg0": "purchase order supplier spend"},
+            "summarizedTitle": "Search purchase order supplier spend",
+        },
+        {
+            "chunkType": "toolResponse",
+            "callId": "c1",
+            "name": "searchViewsAndTables",
+            "createdAt": "2026-07-13T12:39:32.719Z",
+        },
+        {
+            "chunkType": "toolResponse",
+            "callId": "c2",
+            "name": "searchViewsAndTables",
+            "createdAt": "2026-07-13T12:39:32.729Z",
+        },
+    ]
+
+    spans, first_start, last_end = build_tool_spans(rows)
+
+    assert first_start is not None
+    assert last_end is not None
+    assert len(spans) == 2
+    assert {span.lane for span in spans} == {0, 1}
+    assert {span.step for span in spans} == {1}
+    assert spans[0].duration_ms == 2859
+    assert spans[1].offset_ms == 40
+    assert spans[0].arguments == {"arg0": "supplier contract risk exposure"}
+    assert spans[0].title == "Supplier Contract Risk Exposure"
+    assert spans[0].summarized_title == "Search supplier contract risk exposure"
+
+
+def test_load_history_dump_accepts_unescaped_control_chars(tmp_path) -> None:
+    dump_path = tmp_path / "history.json"
+    dump_path.write_text('{"data":[{"chunkType":"model","result":{"text":"line 1\nline 2"}}]}', encoding="utf-8")
+
+    loaded = load_history_dump(dump_path)
+
+    assert loaded["data"][0]["result"]["text"] == "line 1\nline 2"
+
+
+def test_build_history_bounds_uses_all_events() -> None:
+    rows = [
+        {"chunkType": "userMessage", "createdAt": "2026-07-13T12:39:17.794Z"},
+        {"chunkType": "toolRequest", "callId": "c1", "createdAt": "2026-07-13T12:39:29.860Z"},
+        {"chunkType": "toolResponse", "callId": "c1", "createdAt": "2026-07-13T12:39:32.719Z"},
+        {"chunkType": "model", "createdAt": "2026-07-13T12:39:35.000Z"},
+    ]
+
+    bounds = build_history_bounds(rows)
+
+    assert bounds is not None
+    assert bounds.total_ms == 17206
+
+
+def test_build_tool_spans_can_insert_think_time() -> None:
+    rows = [
+        {
+            "chunkType": "toolRequest",
+            "callId": "c1",
+            "name": "searchViewsAndTables",
+            "createdAt": "2026-07-13T12:39:29.860Z",
+            "arguments": {"arg0": "supplier contract risk exposure"},
+        },
+        {
+            "chunkType": "toolResponse",
+            "callId": "c1",
+            "name": "searchViewsAndTables",
+            "createdAt": "2026-07-13T12:39:32.719Z",
+        },
+        {
+            "chunkType": "toolRequest",
+            "callId": "c2",
+            "name": "runSql",
+            "createdAt": "2026-07-13T12:39:32.900Z",
+            "arguments": {"arg0": "select 1"},
+        },
+        {
+            "chunkType": "toolResponse",
+            "callId": "c2",
+            "name": "runSql",
+            "createdAt": "2026-07-13T12:39:33.200Z",
+        },
+    ]
+
+    spans, _, _ = build_tool_spans(rows, include_think_time=True)
+
+    think_spans = [span for span in spans if span.name == "thinkTime"]
+    assert len(think_spans) == 1
+    assert think_spans[0].duration_ms == 181
+    assert think_spans[0].step == 2
+
+
+def test_render_tool_gantt_outputs_chart() -> None:
+    data = {
+        "data": [
+            {
+                "chunkType": "userMessage",
+                "createdAt": "2026-07-13T12:39:17.794Z",
+            },
+            {
+                "chunkType": "toolRequest",
+                "callId": "c1",
+                "name": "searchViewsAndTables",
+                "createdAt": "2026-07-13T12:39:29.860Z",
+                "arguments": {"arg0": "supplier contract risk exposure"},
+            },
+            {
+                "chunkType": "toolRequest",
+                "callId": "c2",
+                "name": "searchViewsAndTables",
+                "createdAt": "2026-07-13T12:39:29.900Z",
+                "arguments": {"arg0": "purchase order supplier spend"},
+            },
+            {
+                "chunkType": "toolResponse",
+                "callId": "c1",
+                "name": "searchViewsAndTables",
+                "createdAt": "2026-07-13T12:39:32.719Z",
+            },
+            {
+                "chunkType": "toolResponse",
+                "callId": "c2",
+                "name": "searchViewsAndTables",
+                "createdAt": "2026-07-13T12:39:32.729Z",
+            },
+            {
+                "chunkType": "model",
+                "createdAt": "2026-07-13T12:39:35.000Z",
+            },
+        ]
+    }
+
+    rendered = render_tool_gantt(data, width=30)
+
+    assert "Total time taken: 17.206s" in rendered
+    assert "Total tool span: 2.869s across 1 step(s), using 2 visual lane(s)" in rendered
+    assert "S1 searchViewsAndTables" in rendered
