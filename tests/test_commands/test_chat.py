@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+from io import StringIO
 from unittest.mock import AsyncMock
 
 import pytest
@@ -32,6 +33,9 @@ from drs.chat_gantt import (
 )
 from drs.chat_gantt_tui import ToolTimeline, _build_span_sections
 from drs.commands.chat import (
+    _build_approval_payload,
+    _extract_tool_approval,
+    _render_history_table,
     cancel_run,
     create_conversation,
     delete_conversation,
@@ -59,7 +63,7 @@ async def test_create_conversation_with_model(mock_client) -> None:
     mock_client.create_conversation = AsyncMock(return_value={"id": "conv-1"})
     await create_conversation(mock_client, "hello", model="gpt-test")
     call_args = mock_client.create_conversation.call_args[0][0]
-    assert call_args["model"] == "gpt-test"
+    assert call_args["modelName"] == "gpt-test"
 
 
 @pytest.mark.asyncio
@@ -87,6 +91,54 @@ async def test_send_message_approval(mock_client) -> None:
     body = mock_client.send_conversation_message.call_args[0][1]
     assert body["prompt"]["approvals"] == approvals
     assert result["runId"] == "run-3"
+
+
+def test_extract_tool_approval_from_model_chunk() -> None:
+    event = {
+        "chunkType": "model",
+        "name": "modelRequestToolApproval",
+        "result": {
+            "approvalNonce": "nonce-1",
+            "toolRequests": [
+                {
+                    "executionId": "exec-1",
+                    "name": "runSql",
+                    "arguments": {"sqlText": "select 1"},
+                }
+            ],
+        },
+    }
+
+    assert _extract_tool_approval(event) == (
+        "nonce-1",
+        event["result"]["toolRequests"],
+    )
+
+
+def test_build_approval_payload_uses_v2_shape() -> None:
+    approvals = _build_approval_payload(
+        "nonce-1",
+        [
+            {
+                "executionId": "exec-1",
+                "name": "runSql",
+                "arguments": {"sqlText": "select 1"},
+            }
+        ],
+        auto_approve=True,
+    )
+
+    assert approvals == {
+        "approvalNonce": "nonce-1",
+        "toolDecisions": [
+            {
+                "executionId": "exec-1",
+                "name": "runSql",
+                "arguments": {"sqlText": "select 1"},
+                "approved": True,
+            }
+        ],
+    }
 
 
 @pytest.mark.asyncio
@@ -207,6 +259,63 @@ def test_build_history_bounds_uses_all_events() -> None:
 
     assert bounds is not None
     assert bounds.total_ms == 17206
+
+
+def test_render_history_table_uses_model_summary_text() -> None:
+    stream = StringIO()
+    console = Console(file=stream, force_terminal=False)
+
+    _render_history_table(
+        console,
+        [
+            {
+                "chunkType": "model",
+                "createdAt": "2026-07-31T12:10:37.969Z",
+                "name": "modelSqlAnswer",
+                "result": {
+                    "title": "Direct Reports to Myra Richmond",
+                    "summary": "Myra Richmond has three direct reports.",
+                },
+            }
+        ],
+    )
+
+    output = stream.getvalue()
+    assert "Direct Reports to Myra Richmond" in output
+    assert "Myra Richmond has three direct reports." in output
+
+
+def test_render_history_table_shows_tool_timing_details() -> None:
+    stream = StringIO()
+    console = Console(file=stream, force_terminal=False)
+
+    _render_history_table(
+        console,
+        [
+            {
+                "chunkType": "toolRequest",
+                "callId": "call-1",
+                "name": "runSql",
+                "summarizedTitle": "Run report query",
+                "createdAt": "2026-07-31T12:10:33.467Z",
+                "arguments": {"sqlText": "select 1"},
+            },
+            {
+                "chunkType": "toolResponse",
+                "callId": "call-1",
+                "name": "runSql",
+                "createdAt": "2026-07-31T12:10:35.270Z",
+                "result": {"rows": [["Lesley Ellis"]]},
+            },
+        ],
+        show_tool_details=True,
+    )
+
+    output = stream.getvalue()
+    assert "Started: 12:10:33" in output
+    assert "Finished: 12:10:35" in output
+    assert "Duration: 1.80s" in output
+    assert '"rows"' in output
 
 
 def test_build_tool_spans_can_insert_think_time() -> None:
