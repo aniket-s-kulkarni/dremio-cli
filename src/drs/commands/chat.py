@@ -39,6 +39,7 @@ from rich.table import Table
 from rich.text import Text
 
 from drs.chat_gantt import load_history_dump, render_tool_gantt
+from drs.chat_gantt_html import build_html_report_payload, write_html_report
 from drs.chat_render import (
     ChatRenderer,
     PlainRenderer,
@@ -285,6 +286,29 @@ async def get_messages(
     """GET /agent/conversations/{id}/messages"""
     try:
         return await client.get_conversation_messages(conversation_id, limit=limit)
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+
+async def get_all_messages(client: DremioClient, conversation_id: str, page_size: int = 200) -> dict:
+    """Retrieve the full message history for a conversation across pagination."""
+    rows: list[dict[str, Any]] = []
+    page_token: str | None = None
+
+    try:
+        while True:
+            result = await client.get_conversation_messages(
+                conversation_id,
+                limit=page_size,
+                page_token=page_token,
+            )
+            batch = result.get("data", result.get("messages", []))
+            if isinstance(batch, list):
+                rows.extend(batch)
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+        return {"data": rows}
     except httpx.HTTPStatusError as exc:
         raise handle_api_error(exc) from exc
 
@@ -896,6 +920,75 @@ def chat_gantt(
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print_error(f"Unable to render Gantt chart: {exc}")
         raise typer.Exit(1)
+
+
+@app.command("html")
+def chat_html(
+    conversation_ids: list[str] = typer.Argument(
+        None,
+        help="Conversation IDs to include. Provide multiple IDs as positional arguments.",
+    ),
+    output_file: Path = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        dir_okay=False,
+        help="Destination HTML file",
+    ),
+    dump_files: list[Path] = typer.Option(
+        [],
+        "--dump-file",
+        help="Chat history dump JSON file to include. Repeat to add multiple dumps.",
+    ),
+    think_time: bool = typer.Option(
+        False,
+        "--think-time",
+        help="Include synthetic think-time gaps between steps when the gap exceeds 5 ms",
+    ),
+) -> None:
+    """Export one or more conversation histories as a standalone HTML Gantt report."""
+    if not conversation_ids and not dump_files:
+        print_error("Provide at least one conversation ID or --dump-file input.")
+        raise typer.Exit(1)
+
+    client = _get_client() if conversation_ids else None
+
+    async def _run() -> list[dict[str, Any]]:
+        conversations: list[dict[str, Any]] = []
+        try:
+            if client is not None:
+                for conversation_id in conversation_ids:
+                    conversations.append(
+                        {
+                            "id": conversation_id,
+                            "label": conversation_id,
+                            "source": "conversation",
+                            "data": await get_all_messages(client, conversation_id),
+                        }
+                    )
+            for dump_file in dump_files:
+                conversations.append(
+                    {
+                        "id": dump_file.stem,
+                        "label": dump_file.stem,
+                        "source": str(dump_file),
+                        "data": load_history_dump(dump_file),
+                    }
+                )
+            return conversations
+        finally:
+            if client is not None:
+                await client.close()
+
+    try:
+        conversations = asyncio.run(_run())
+        payload = build_html_report_payload(conversations, include_think_time=think_time)
+        write_html_report(output_file, payload)
+    except (DremioAPIError, OSError, ValueError, json.JSONDecodeError) as exc:
+        print_error(f"Unable to export chat HTML report: {exc}")
+        raise typer.Exit(1)
+
+    Console().print(f"[green]Wrote chat report:[/] {output_file}")
 
 
 @app.command("delete")

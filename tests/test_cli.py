@@ -143,3 +143,77 @@ def test_chat_history_gantt_command_accepts_messages_envelope(monkeypatch) -> No
 
     assert result.exit_code == 0
     assert "S1 searchViewsAndTables" in result.output
+
+
+def test_chat_html_command_from_dump(tmp_path) -> None:
+    dump_path = tmp_path / "history.json"
+    output_path = tmp_path / "report.html"
+    dump_path.write_text(
+        json.dumps(
+            {
+                "data": [
+                    {
+                        "chunkType": "toolRequest",
+                        "callId": "c1",
+                        "name": "searchViewsAndTables",
+                        "createdAt": "2026-07-13T12:39:29.860Z",
+                        "arguments": {"arg0": "supplier contract risk exposure"},
+                    },
+                    {
+                        "chunkType": "toolResponse",
+                        "callId": "c1",
+                        "name": "searchViewsAndTables",
+                        "createdAt": "2026-07-13T12:39:32.719Z",
+                        "result": {"rows": []},
+                    },
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["chat", "html", "-o", str(output_path), "--dump-file", str(dump_path)])
+
+    assert result.exit_code == 0
+    report = output_path.read_text(encoding="utf-8")
+    assert "<!doctype html>" in report
+    assert '"conversationCount": 1' in report
+    assert '"callId": "c1"' in report
+
+
+def test_chat_html_command_accepts_positional_conversation_ids(monkeypatch, tmp_path) -> None:
+    from drs.commands import chat
+
+    client = type("DummyClient", (), {"close": AsyncMock()})()
+    monkeypatch.setattr(chat, "_get_client", lambda: client)
+
+    async def fake_get_all_messages(client, conversation_id, page_size=200):
+        return {
+            "data": [
+                {
+                    "chunkType": "toolRequest",
+                    "callId": f"{conversation_id}-c1",
+                    "name": "runSql",
+                    "createdAt": "2026-07-31T12:10:33.467Z",
+                    "arguments": {"sqlText": "select 1"},
+                },
+                {
+                    "chunkType": "toolResponse",
+                    "callId": f"{conversation_id}-c1",
+                    "name": "runSql",
+                    "createdAt": "2026-07-31T12:10:35.270Z",
+                    "result": {"rows": []},
+                },
+            ]
+        }
+
+    monkeypatch.setattr(chat, "get_all_messages", fake_get_all_messages)
+
+    output_path = tmp_path / "report.html"
+    result = runner.invoke(app, ["chat", "html", "conv-1", "conv-2", "-o", str(output_path)])
+
+    assert result.exit_code == 0
+    report = output_path.read_text(encoding="utf-8")
+    assert '"conversationCount": 2' in report
+    assert '"id": "conv-1"' in report
+    assert '"id": "conv-2"' in report
