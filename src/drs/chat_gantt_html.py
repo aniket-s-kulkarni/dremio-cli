@@ -108,9 +108,9 @@ def _build_duration_stats(values: list[int]) -> dict[str, Any]:
             "totalLabel": format_duration_ms(0),
         }
 
-    mean_ms = int(round(mean(values)))
-    median_ms = int(round(median(values)))
-    std_dev_ms = int(round(pstdev(values))) if len(values) > 1 else 0
+    mean_ms = round(mean(values))
+    median_ms = round(median(values))
+    std_dev_ms = round(pstdev(values)) if len(values) > 1 else 0
     min_ms = min(values)
     max_ms = max(values)
     total_ms = sum(values)

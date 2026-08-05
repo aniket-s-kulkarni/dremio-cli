@@ -127,6 +127,7 @@ If this returns `{"job_id": "...", "state": "COMPLETED", "rowCount": 1, "rows": 
 | `dremio role` | `list`, `get`, `create`, `update`, `delete` | Full CRUD for organization roles |
 | `dremio grant` | `get`, `update`, `delete` | Manage grants on projects, engines, org resources |
 | `dremio project` | `list`, `get`, `create`, `update`, `delete` | Full CRUD for Dremio Cloud projects |
+| `dremio chat` | `list`, `history`, `gantt`, `html`, interactive chat | Work with AI agent conversations, tool traces, timelines, and standalone reports |
 | `dremio search` | *(top-level)* | Full-text search across all catalog entities |
 | `dremio describe` | *(top-level)* | Machine-readable schema for any command |
 
@@ -172,6 +173,16 @@ dremio job list --status FAILED --output pretty
 
 # Audit what roles and permissions a user has
 dremio user audit rahim.bhojani
+
+# Show a conversation transcript with tool timestamps, durations, and detailed results
+dremio chat history CONVERSATION_ID --show-tool-details
+
+# Render a terminal Gantt timeline for a saved chat history dump
+dremio chat gantt ./history.json --ascii --think-time
+
+# Export one or more conversations to a standalone HTML report
+dremio chat html conv-1 conv-2 -o report.html
+dremio chat html -o report.html --dump-file ./history.json --dump-file ./history-2.json
 ```
 
 ### Output formats
@@ -208,6 +219,63 @@ dremio describe reflection.list
 ```
 
 Returns a JSON schema with parameter names, types, required/optional, and descriptions. Useful for building automation on top of `dremio`.
+
+## Chat debugging workflows
+
+The `dremio chat` command group includes tools for investigating AI agent runs after the fact, both in the terminal and in a standalone HTML report.
+
+### Detailed transcript output
+
+Use `--show-tool-details` with one-shot chat or chat history to include:
+
+- Tool start and finish timestamps
+- Per-tool duration
+- Full tool results instead of a compact `done` line
+
+```bash
+# One-shot chat with full tool details
+dremio chat -m "who reports to Myra Richmond" --show-tool-details
+
+# Existing conversation transcript with full tool details
+dremio chat history CONVERSATION_ID --show-tool-details
+```
+
+### Terminal Gantt timelines
+
+Use `dremio chat gantt` for a saved history dump, or `dremio chat history --gantt` for a live conversation history.
+
+```bash
+# Render plain ASCII output
+dremio chat gantt ./history.json --ascii
+
+# Include synthetic think-time gaps between steps
+dremio chat history CONVERSATION_ID --gantt --ascii --think-time
+```
+
+The Textual Gantt viewer adapts its foreground colors to light and dark terminal themes and uses transparent backgrounds so it blends into the terminal instead of forcing its own surface color.
+
+### Standalone HTML report
+
+Use `dremio chat html` to export a self-contained report with all data embedded in the page.
+
+```bash
+# Export multiple conversation IDs
+dremio chat html conv-1 conv-2 conv-3 -o report.html
+
+# Export one or more local history dumps
+dremio chat html -o report.html --dump-file ./history.json --dump-file ./history-2.json
+
+# Include think-time spans in the report
+dremio chat html conv-1 -o report.html --think-time
+```
+
+The HTML report includes:
+
+- An overview page with aggregate stats across all included conversations
+- Mean, median, standard deviation, min, max, and totals for run time, tool time, think time, and tool durations
+- Navigation from the overview page into each individual conversation timeline
+- Conversation summary and result content
+- Selected-span payload and tool result details
 
 ## CRUD design principle
 
