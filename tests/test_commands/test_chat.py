@@ -141,6 +141,29 @@ def test_build_approval_payload_uses_v2_shape() -> None:
     }
 
 
+def test_build_approval_payload_preserves_legacy_interrupt_shape() -> None:
+    approvals = _build_approval_payload(
+        "nonce-1",
+        [
+            {
+                "callId": "legacy-1",
+                "decision": "approved",
+            }
+        ],
+        auto_approve=False,
+    )
+
+    assert approvals == {
+        "approvalNonce": "nonce-1",
+        "toolDecisions": [
+            {
+                "callId": "legacy-1",
+                "decision": "denied",
+            }
+        ],
+    }
+
+
 @pytest.mark.asyncio
 async def test_list_conversations(mock_client) -> None:
     mock_client.list_conversations = AsyncMock(

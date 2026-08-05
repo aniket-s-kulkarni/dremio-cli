@@ -369,14 +369,22 @@ def _build_approval_payload(nonce: str, tools: list[dict[str, Any]], auto_approv
         execution_id = tool.get("executionId", tool.get("callId", tool.get("id", "")))
         name = tool.get("name", "")
         arguments = tool.get("arguments", {})
-        if not execution_id or not name:
+        if not execution_id:
+            continue
+        if name:
+            decisions.append(
+                {
+                    "executionId": execution_id,
+                    "name": name,
+                    "arguments": arguments if isinstance(arguments, dict) else {},
+                    "approved": auto_approve,
+                }
+            )
             continue
         decisions.append(
             {
-                "executionId": execution_id,
-                "name": name,
-                "arguments": arguments if isinstance(arguments, dict) else {},
-                "approved": auto_approve,
+                "callId": execution_id,
+                "decision": "approved" if auto_approve else "denied",
             }
         )
     return {

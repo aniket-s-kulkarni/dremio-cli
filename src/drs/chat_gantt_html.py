@@ -237,7 +237,12 @@ def build_html_report_payload(
 
 def render_html_report(payload: dict[str, Any]) -> str:
     """Render a self-contained HTML report with embedded JSON payload."""
-    payload_json = json.dumps(payload, indent=2)
+    payload_json = (
+        json.dumps(payload, indent=2)
+        .replace("&", "\\u0026")
+        .replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+    )
     title_suffix = ""
     if payload.get("conversationCount") == 1 and payload.get("conversations"):
         first = payload["conversations"][0]

@@ -228,3 +228,22 @@ def test_render_html_report_embeds_json_payload() -> None:
     assert "Three people report to Myra Richmond." in html
     assert "Tool Result" in html
     assert "Conversation Result" in html
+
+
+def test_render_html_report_escapes_script_terminators_in_payload() -> None:
+    html = render_html_report(
+        {
+            "conversationCount": 1,
+            "conversations": [
+                {
+                    "id": "conv-1",
+                    "label": "Conversation 1",
+                    "conversationSummary": {"title": "Result"},
+                    "conversationResult": "</script><script>alert(1)</script>",
+                }
+            ],
+        }
+    )
+
+    assert "</script><script>alert(1)</script>" not in html
+    assert "\\u003c/script\\u003e\\u003cscript\\u003ealert(1)\\u003c/script\\u003e" in html
