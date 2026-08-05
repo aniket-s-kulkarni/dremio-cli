@@ -505,7 +505,9 @@ class ChatGanttApp(App[None]):
                     (truncate_label(span.name, 22), "red" if span.failed else palette.label),
                 )
                 offset_cell = format_duration_ms(span.offset_ms)
-                duration_cell = Text(format_duration_ms(span.duration_ms), style="red" if span.failed else palette.label)
+                duration_cell = Text(
+                    format_duration_ms(span.duration_ms), style="red" if span.failed else palette.label
+                )
             table.add_row(
                 str(span.step),
                 tool_cell,

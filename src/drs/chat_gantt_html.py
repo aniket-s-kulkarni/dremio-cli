@@ -770,7 +770,7 @@ def render_html_report(payload: dict[str, Any]) -> str:
         if (normalized.startsWith("|")) normalized = normalized.slice(1);
         if (normalized.endsWith("|")) normalized = normalized.slice(0, -1);
         const cells = normalized.split("|").map((cell) => cell.trim());
-        return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell));
+        return cells.length > 0 && cells.every((cell) => /^:?-{{3,}}:?$/.test(cell));
       }}
 
       function splitTableRow(line) {{
@@ -837,7 +837,7 @@ def render_html_report(payload: dict[str, Any]) -> str:
           continue;
         }}
 
-        const headingMatch = trimmed.match(/^(#{1,6})\\s+(.*)$/);
+        const headingMatch = trimmed.match(/^(#{{1,6}})\\s+(.*)$/);
         if (headingMatch) {{
           flushParagraph();
           flushList();

@@ -86,7 +86,10 @@ def test_build_html_report_payload_supports_multiple_conversations() -> None:
     assert payload["overview"]["avgToolCallsPerConversation"] == 1
     assert payload["overview"]["runTime"]["count"] == 2
     assert payload["overview"]["toolDuration"]["count"] == 2
-    assert payload["conversations"][0]["conversationResult"] == "Direct Reports to Myra Richmond\n\nThree people report to Myra Richmond."
+    assert (
+        payload["conversations"][0]["conversationResult"]
+        == "Direct Reports to Myra Richmond\n\nThree people report to Myra Richmond."
+    )
     assert payload["conversations"][0]["timeline"]["spans"][0]["callId"] == "c1"
     assert payload["conversations"][0]["timeline"]["spans"][0]["toolResult"] == {"rows": [["Lesley Ellis"]]}
     assert payload["conversations"][1]["timeline"]["spans"][0]["callId"] == "c2"
