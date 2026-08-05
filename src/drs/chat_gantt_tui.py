@@ -49,6 +49,49 @@ ROW_LABEL_WIDTH = 8
 ROW_FIXED_WIDTH = 2 + ROW_LABEL_WIDTH + LABEL_WIDTH + 1 + 12
 
 
+@dataclass(frozen=True)
+class GanttPalette:
+    """Theme-aware colors for the Gantt TUI."""
+
+    axis: str
+    think_time: str
+    label: str
+    muted_label: str
+    panel_border: str
+    summary_border: str
+    selection_border: str
+
+
+def _theme_is_dark(app: App | None) -> bool:
+    """Return whether the active Textual theme is dark."""
+    if app is None:
+        return True
+    return app.current_theme.dark
+
+
+def _palette(app: App | None) -> GanttPalette:
+    """Choose foreground colors that work on transparent light or dark terminals."""
+    if _theme_is_dark(app):
+        return GanttPalette(
+            axis="grey70",
+            think_time="grey50",
+            label="white",
+            muted_label="grey70",
+            panel_border="bright_blue",
+            summary_border="cyan",
+            selection_border="green",
+        )
+    return GanttPalette(
+        axis="grey30",
+        think_time="grey50",
+        label="black",
+        muted_label="grey30",
+        panel_border="blue",
+        summary_border="dark_cyan",
+        selection_border="dark_green",
+    )
+
+
 def _header_chart_width(viewport_width: int) -> int:
     """Choose a header chart width that follows the viewport size."""
     return max(viewport_width - 4, 40)
@@ -75,7 +118,7 @@ def _span_marker(span: ToolSpan) -> tuple[str, str]:
     if span.failed:
         return "●", "red"
     if span.name == "thinkTime":
-        return "•", "bright_black"
+        return "•", "grey50"
     return "●", "green"
 
 
@@ -181,6 +224,7 @@ class GanttChart(Static):
         self.timeline = timeline
 
     def render(self) -> RenderableType:
+        palette = _palette(self.app if self.is_mounted else None)
         width = _header_chart_width(self.size.width)
         chart_lines = []
         axis_ticks = 5
@@ -195,12 +239,12 @@ class GanttChart(Static):
             for off, ch in enumerate(label):
                 labels[start_idx + off] = ch
 
-        chart_lines.append(Text("".join(labels), style="dim"))
-        chart_lines.append(Text("".join(markers), style="dim"))
+        chart_lines.append(Text("".join(labels), style=palette.axis))
+        chart_lines.append(Text("".join(markers), style=palette.axis))
         legend = Text("Legend: ", style="bold")
         legend.append("● error  ", style="red")
         legend.append("● success  ", style="green")
-        legend.append("■ think time  ", style="bright_black")
+        legend.append("■ think time  ", style=palette.think_time)
         legend.append("■ short (<5%)  ", style="green")
         legend.append("■ medium (5-15%)  ", style="yellow")
         legend.append("■ long (15-30%)  ", style="magenta")
@@ -215,7 +259,7 @@ class GanttChart(Static):
             f"{format_duration_ms(self.timeline.history_bounds.total_ms)} total time  "
             "↑/↓ select  ←/→ pan  Enter details"
         )
-        return Panel(body, title="Tool Timeline", subtitle=subtitle, border_style="blue")
+        return Panel(body, title="Tool Timeline", subtitle=subtitle, border_style=palette.panel_border)
 
 
 class GanttRows(Static):
@@ -228,6 +272,7 @@ class GanttRows(Static):
         self.timeline = timeline
 
     def render(self) -> RenderableType:
+        palette = _palette(self.app if self.is_mounted else None)
         label_width = LABEL_WIDTH
         width = _row_bar_width(self.size.width)
         chart_lines = []
@@ -240,7 +285,7 @@ class GanttRows(Static):
             color = (
                 "red"
                 if span.failed
-                else "bright_black"
+                else palette.think_time
                 if span.name == "thinkTime"
                 else _duration_color(span.duration_ms, self.timeline.total_ms)
             )
@@ -257,11 +302,13 @@ class GanttRows(Static):
             bar.append(f"Step {span.step}".ljust(ROW_LABEL_WIDTH), style=f"bold {line_style}".strip())
             bar.append(f"{marker} ", style=f"{marker_style} {line_style}".strip())
             bar.append(
-                truncate_label(span.label, label_width - 2).ljust(label_width), style=f"white {line_style}".strip()
+                truncate_label(span.label, label_width - 2).ljust(label_width),
+                style=f"{palette.label} {line_style}".strip(),
             )
             bar.append(" ", style=line_style)
             bar.append("".join(fill), style=bar_style)
-            bar.append(f"  {format_duration_ms(span.duration_ms)}", style=f"dim {line_style}".strip())
+            duration_style = "red" if span.failed else palette.muted_label
+            bar.append(f"  {format_duration_ms(span.duration_ms)}", style=f"{duration_style} {line_style}".strip())
             chart_lines.append(bar)
 
         return Group(*chart_lines)
@@ -299,17 +346,19 @@ class ToolDetails(Static):
     """Details pane for the selected tool call."""
 
     def show_placeholder(self) -> None:
+        palette = _palette(self.app if self.is_mounted else None)
         self.update(
             Panel(
-                Text("Select a Gantt row with ↑/↓ and press Enter to view details.", style="dim"),
+                Text("Select a Gantt row with ↑/↓ and press Enter to view details.", style=palette.muted_label),
                 title="Selection",
-                border_style="green",
+                border_style=palette.selection_border,
             )
         )
 
     def show_span(self, span: ToolSpan) -> None:
         sections = _build_span_sections(span, self.app.timeline)
-        self.update(Panel(Group(*sections), title="Selection", border_style="green"))
+        palette = _palette(self.app if self.is_mounted else None)
+        self.update(Panel(Group(*sections), title="Selection", border_style=palette.selection_border))
 
 
 class ToolDetailModal(ModalScreen[None]):
@@ -318,17 +367,19 @@ class ToolDetailModal(ModalScreen[None]):
     CSS = """
     ToolDetailModal {
         align: center middle;
+        background: transparent;
     }
     #detail-modal {
         width: 88%;
         height: 88%;
         border: round $accent;
-        background: $surface;
+        background: transparent;
         padding: 1 2;
     }
     #detail-modal-body {
         height: 1fr;
         width: 1fr;
+        background: transparent;
     }
     """
 
@@ -368,31 +419,39 @@ class ChatGanttApp(App[None]):
     CSS = """
     Screen {
         layout: vertical;
+        background: transparent;
     }
     #main {
         height: 1fr;
+        background: transparent;
     }
     #table-pane {
         width: 48;
         min-width: 36;
+        background: transparent;
     }
     #spans {
         height: 1fr;
+        background: transparent;
     }
     #chart-scroll {
         height: 1fr;
         width: 1fr;
+        background: transparent;
     }
     #chart-header-scroll {
         height: 6;
         width: 1fr;
+        background: transparent;
     }
     #details {
         height: 12;
+        background: transparent;
     }
     #summary {
         height: 7;
         min-height: 7;
+        background: transparent;
     }
     """
 
@@ -425,6 +484,7 @@ class ChatGanttApp(App[None]):
         yield Footer()
 
     def on_mount(self) -> None:
+        palette = _palette(self)
         table = self.query_one("#spans", DataTable)
         table.cursor_type = "row"
         table.zebra_stripes = True
@@ -435,16 +495,19 @@ class ChatGanttApp(App[None]):
             offset_cell: str | Text
             duration_cell: str | Text
             if span.name == "thinkTime":
-                tool_cell = Text.assemble(("• ", "bright_black"), ("think time", "dim"))
-                offset_cell = Text("", style="dim")
-                duration_cell = Text(format_duration_ms(span.duration_ms), style="dim")
+                tool_cell = Text.assemble(("• ", palette.think_time), ("think time", palette.muted_label))
+                offset_cell = Text("", style=palette.muted_label)
+                duration_cell = Text(format_duration_ms(span.duration_ms), style=palette.muted_label)
             else:
                 marker, marker_style = _span_marker(span)
                 tool_cell = Text.assemble(
-                    (f"{marker} ", marker_style), (truncate_label(span.name, 22), "red" if span.failed else "")
+                    (f"{marker} ", marker_style),
+                    (truncate_label(span.name, 22), "red" if span.failed else palette.label),
                 )
                 offset_cell = format_duration_ms(span.offset_ms)
-                duration_cell = Text(format_duration_ms(span.duration_ms), style="red" if span.failed else "")
+                duration_cell = Text(
+                    format_duration_ms(span.duration_ms), style="red" if span.failed else palette.label
+                )
             table.add_row(
                 str(span.step),
                 tool_cell,
@@ -470,7 +533,7 @@ class ChatGanttApp(App[None]):
                     )
                 ),
                 title="Summary",
-                border_style="cyan",
+                border_style=palette.summary_border,
             )
         )
         table.focus()

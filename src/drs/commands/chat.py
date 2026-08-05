@@ -22,6 +22,7 @@ import contextlib
 import json
 import logging
 import sys
+from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
 from typing import Any
@@ -38,7 +39,16 @@ from rich.table import Table
 from rich.text import Text
 
 from drs.chat_gantt import load_history_dump, render_tool_gantt
-from drs.chat_render import ChatRenderer, PlainRenderer
+from drs.chat_gantt_html import build_html_report_payload, write_html_report
+from drs.chat_render import (
+    ChatRenderer,
+    PlainRenderer,
+    _format_duration_ms,
+    _format_timestamp,
+    _format_tool_result,
+    _summarize_args,
+    extract_model_text,
+)
 from drs.client import DremioClient
 from drs.output import error as print_error
 from drs.sse import parse_sse_stream
@@ -106,8 +116,10 @@ def _render_conversations_table(console: Console, rows: list[dict]) -> None:
     console.print(table)
 
 
-def _render_history_table(console: Console, rows: list[dict]) -> None:
+def _render_history_table(console: Console, rows: list[dict], show_tool_details: bool = False) -> None:
     """Render conversation history as a readable transcript."""
+    tool_started_at: dict[str, datetime] = {}
+
     for row in rows:
         chunk_type = row.get("chunkType", "")
         timestamp = str(row.get("createdAt", ""))
@@ -121,7 +133,7 @@ def _render_history_table(console: Console, rows: list[dict]) -> None:
 
         elif chunk_type == "model":
             result = row.get("result", {})
-            text = result.get("text", "") if isinstance(result, dict) else str(result)
+            text = extract_model_text(row.get("name", ""), result) if isinstance(result, dict) else str(result)
             name = row.get("name", "")
             title = "[bold blue]Agent[/]"
             if name and name != "modelGeneric":
@@ -132,11 +144,60 @@ def _render_history_table(console: Console, rows: list[dict]) -> None:
         elif chunk_type == "toolRequest":
             tool_name = row.get("name", "")
             summarized = row.get("summarizedTitle", tool_name)
-            console.print(Text(f"  ⚙ {summarized}", style="dim cyan"))
+            call_id = row.get("callId", "")
+            started_at = _parse_event_timestamp(row.get("createdAt"))
+            if call_id and started_at is not None:
+                tool_started_at[call_id] = started_at
+            if show_tool_details:
+                formatted_time = _format_timestamp(row.get("createdAt"))
+                args_summary = ""
+                arguments = row.get("arguments")
+                if isinstance(arguments, dict):
+                    args_summary = _summarize_args(arguments)
+                details = []
+                if formatted_time:
+                    details.append(f"Started: {formatted_time}")
+                details.append(args_summary or "(no arguments)")
+                console.print(
+                    Panel(
+                        Text("\n".join(details), style="dim"),
+                        title=f"[bold cyan]Tool: {summarized}[/]",
+                        border_style="cyan",
+                        expand=False,
+                    )
+                )
+            else:
+                console.print(Text(f"  ⚙ {summarized}", style="dim cyan"))
 
         elif chunk_type == "toolResponse":
             tool_name = row.get("name", "")
-            console.print(Text(f"  ✓ {tool_name} done", style="dim"))
+            if show_tool_details:
+                call_id = row.get("callId", "")
+                finished_at = _parse_event_timestamp(row.get("createdAt"))
+                started_at = tool_started_at.pop(call_id, None)
+                duration_ms = None
+                if started_at is not None and finished_at is not None:
+                    duration_ms = max((finished_at - started_at).total_seconds() * 1000, 0.0)
+                meta: list[str] = []
+                formatted_time = _format_timestamp(row.get("createdAt"))
+                formatted_duration = _format_duration_ms(duration_ms)
+                if formatted_time:
+                    meta.append(f"Finished: {formatted_time}")
+                if formatted_duration:
+                    meta.append(f"Duration: {formatted_duration}")
+                body = _format_tool_result(row.get("result"), max_len=None)
+                if meta:
+                    body = "\n".join(meta) + "\n\n" + body
+                console.print(
+                    Panel(
+                        Text(body, style="dim"),
+                        title=f"[dim]{tool_name} result[/]",
+                        border_style="dim",
+                        expand=False,
+                    )
+                )
+            else:
+                console.print(Text(f"  ✓ {tool_name} done", style="dim"))
 
 
 def _render_generic_table(console: Console, rows: list[dict]) -> None:
@@ -163,7 +224,7 @@ async def create_conversation(
     """POST /agent/conversations — start a new conversation."""
     body: dict[str, Any] = {"prompt": {"text": text}}
     if model:
-        body["model"] = model
+        body["modelName"] = model
     try:
         return await client.create_conversation(body)
     except httpx.HTTPStatusError as exc:
@@ -184,7 +245,7 @@ async def send_message(
     if approvals:
         body["prompt"]["approvals"] = approvals
     if model:
-        body["model"] = model
+        body["modelName"] = model
     try:
         return await client.send_conversation_message(conversation_id, body)
     except httpx.HTTPStatusError as exc:
@@ -229,6 +290,29 @@ async def get_messages(
         raise handle_api_error(exc) from exc
 
 
+async def get_all_messages(client: DremioClient, conversation_id: str, page_size: int = 200) -> dict:
+    """Retrieve the full message history for a conversation across pagination."""
+    rows: list[dict[str, Any]] = []
+    page_token: str | None = None
+
+    try:
+        while True:
+            result = await client.get_conversation_messages(
+                conversation_id,
+                limit=page_size,
+                page_token=page_token,
+            )
+            batch = result.get("data", result.get("messages", []))
+            if isinstance(batch, list):
+                rows.extend(batch)
+            page_token = result.get("nextPageToken")
+            if not page_token:
+                break
+        return {"data": rows}
+    except httpx.HTTPStatusError as exc:
+        raise handle_api_error(exc) from exc
+
+
 async def delete_conversation(client: DremioClient, conversation_id: str) -> dict:
     """DELETE /agent/conversations/{id}"""
     try:
@@ -256,6 +340,69 @@ def _extract_ids(result: dict) -> tuple[str | None, str | None]:
     return conv_id, run_id
 
 
+def _extract_tool_approval(data: dict[str, Any]) -> tuple[str, list[dict[str, Any]]] | None:
+    """Extract a tool approval request from either legacy or model-based chunks."""
+    if data.get("chunkType") == "interrupt":
+        nonce = data.get("approvalNonce")
+        tools = data.get("toolDecisions")
+        if isinstance(nonce, str) and isinstance(tools, list):
+            return nonce, tools
+
+    if data.get("chunkType") != "model" or data.get("name") != "modelRequestToolApproval":
+        return None
+
+    result = data.get("result")
+    if not isinstance(result, dict):
+        return None
+
+    nonce = result.get("approvalNonce")
+    tool_requests = result.get("toolRequests")
+    if not isinstance(nonce, str) or not isinstance(tool_requests, list):
+        return None
+    return nonce, tool_requests
+
+
+def _build_approval_payload(nonce: str, tools: list[dict[str, Any]], auto_approve: bool) -> dict[str, Any]:
+    """Convert streamed approval requests into the v2 approvals payload."""
+    decisions: list[dict[str, Any]] = []
+    for tool in tools:
+        execution_id = tool.get("executionId", tool.get("callId", tool.get("id", "")))
+        name = tool.get("name", "")
+        arguments = tool.get("arguments", {})
+        if not execution_id:
+            continue
+        if name:
+            decisions.append(
+                {
+                    "executionId": execution_id,
+                    "name": name,
+                    "arguments": arguments if isinstance(arguments, dict) else {},
+                    "approved": auto_approve,
+                }
+            )
+            continue
+        decisions.append(
+            {
+                "callId": execution_id,
+                "decision": "approved" if auto_approve else "denied",
+            }
+        )
+    return {
+        "approvalNonce": nonce,
+        "toolDecisions": decisions,
+    }
+
+
+def _parse_event_timestamp(value: Any) -> datetime | None:
+    """Parse an event timestamp emitted by the chat API."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # SSE event dispatch
 # ---------------------------------------------------------------------------
@@ -276,6 +423,7 @@ async def dispatch_events(
     """
     renderer.start_spinner()
     first_model_chunk = True
+    tool_started_at: dict[str, datetime] = {}
 
     try:
         async for event in stream_run(client, conversation_id, run_id):
@@ -295,22 +443,63 @@ async def dispatch_events(
                 result = data.get("result", {})
                 renderer.render_model_chunk(name, result)
 
+                approval_request = _extract_tool_approval(data)
+                if approval_request is not None:
+                    nonce, tools = approval_request
+                    if interactive and isinstance(renderer, ChatRenderer):
+                        approvals = renderer.prompt_tool_approval(nonce, tools)
+                    else:
+                        approvals = _build_approval_payload(nonce, tools, auto_approve)
+
+                    resp = await send_message(
+                        client,
+                        conversation_id,
+                        approvals=approvals,
+                    )
+                    _, new_run_id = _extract_ids(resp)
+                    if new_run_id:
+                        run_id = new_run_id
+                        renderer.start_spinner()
+                        first_model_chunk = True
+                        return await dispatch_events(
+                            client,
+                            renderer,
+                            conversation_id,
+                            run_id,
+                            auto_approve=auto_approve,
+                            interactive=interactive,
+                            log_file=log_file,
+                        )
+
             elif chunk_type == "toolRequest":
                 renderer.stop_spinner()
+                call_id = data.get("callId", "")
+                started_at = _parse_event_timestamp(data.get("createdAt"))
+                if call_id and started_at is not None:
+                    tool_started_at[call_id] = started_at
                 renderer.render_tool_request(
-                    call_id=data.get("callId", ""),
+                    call_id=call_id,
                     name=data.get("name", ""),
                     arguments=data.get("arguments"),
                     title=data.get("summarizedTitle"),
+                    created_at=data.get("createdAt"),
                 )
                 renderer.start_spinner()
 
             elif chunk_type == "toolResponse":
                 renderer.stop_spinner()
+                call_id = data.get("callId", "")
+                finished_at = _parse_event_timestamp(data.get("createdAt"))
+                started_at = tool_started_at.pop(call_id, None)
+                duration_ms = None
+                if started_at is not None and finished_at is not None:
+                    duration_ms = max((finished_at - started_at).total_seconds() * 1000, 0.0)
                 renderer.render_tool_response(
-                    call_id=data.get("callId", ""),
+                    call_id=call_id,
                     name=data.get("name", ""),
                     result=data.get("result"),
+                    created_at=data.get("createdAt"),
+                    duration_ms=duration_ms,
                 )
                 renderer.start_spinner()
 
@@ -329,21 +518,15 @@ async def dispatch_events(
 
             elif chunk_type == "interrupt":
                 renderer.stop_spinner()
-                nonce = data.get("approvalNonce", "")
-                tools = data.get("toolDecisions", [])
+                approval_request = _extract_tool_approval(data)
+                if approval_request is None:
+                    continue
+                nonce, tools = approval_request
 
                 if interactive and isinstance(renderer, ChatRenderer):
                     approvals = renderer.prompt_tool_approval(nonce, tools)
                 else:
-                    decisions = []
-                    for tool in tools:
-                        decisions.append(
-                            {
-                                "callId": tool.get("callId", tool.get("id", "")),
-                                "decision": "approved" if auto_approve else "denied",
-                            }
-                        )
-                    approvals = {"approvalNonce": nonce, "toolDecisions": decisions}
+                    approvals = _build_approval_payload(nonce, tools, auto_approve)
 
                 resp = await send_message(
                     client,
@@ -541,9 +724,10 @@ async def chat_oneshot(
     auto_approve: bool = False,
     model: str | None = None,
     log_file: Any | None = None,
+    show_tool_details: bool = False,
 ) -> None:
     """Send a single message and stream the response to stdout."""
-    renderer = PlainRenderer()
+    renderer = PlainRenderer(show_tool_details=show_tool_details)
 
     if conversation_id is None:
         result = await create_conversation(client, message, model=model)
@@ -593,6 +777,11 @@ def chat_main(
     auto_approve: bool = typer.Option(False, "--auto-approve", help="Auto-approve tool calls (non-interactive only)"),
     log_file: str | None = typer.Option(None, "--log-file", help="Path to JSON-lines event log file"),
     model: str | None = typer.Option(None, "--model", help="Model override"),
+    show_tool_details: bool = typer.Option(
+        False,
+        "--show-tool-details",
+        help="Show tool timestamps, durations, and detailed tool results",
+    ),
 ) -> None:
     """Chat with the Dremio AI Agent. Launches interactive REPL by default."""
     if ctx.invoked_subcommand is not None:
@@ -615,9 +804,10 @@ def chat_main(
                     auto_approve=auto_approve,
                     model=model,
                     log_file=log_fh,
+                    show_tool_details=show_tool_details,
                 )
             else:
-                renderer = ChatRenderer()
+                renderer = ChatRenderer(show_tool_details=show_tool_details)
                 await chat_repl(
                     client,
                     renderer,
@@ -674,6 +864,11 @@ def chat_history(
     ascii: bool = typer.Option(
         False, "--ascii", help="With --gantt, render plain ASCII output instead of launching the Textual TUI"
     ),
+    show_tool_details: bool = typer.Option(
+        False,
+        "--show-tool-details",
+        help="Show tool timestamps, durations, and detailed tool results in transcript output",
+    ),
     fmt: ChatFormat = typer.Option(ChatFormat.table, "--format", "-f", help="Output format: json, table"),
 ) -> None:
     """Show message history for a conversation."""
@@ -702,6 +897,12 @@ def chat_history(
         except ValueError as exc:
             print_error(f"Unable to render Gantt chart: {exc}")
             raise typer.Exit(1)
+    if fmt == ChatFormat.table:
+        console = Console()
+        rows = result.get("data", result.get("messages", []))
+        if rows and isinstance(rows, list) and isinstance(rows[0], dict) and "chunkType" in rows[0]:
+            _render_history_table(console, rows, show_tool_details=show_tool_details)
+            return
     _chat_output(result, fmt)
 
 
@@ -727,6 +928,75 @@ def chat_gantt(
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print_error(f"Unable to render Gantt chart: {exc}")
         raise typer.Exit(1)
+
+
+@app.command("html")
+def chat_html(
+    conversation_ids: list[str] = typer.Argument(
+        None,
+        help="Conversation IDs to include. Provide multiple IDs as positional arguments.",
+    ),
+    output_file: Path = typer.Option(
+        ...,
+        "--output",
+        "-o",
+        dir_okay=False,
+        help="Destination HTML file",
+    ),
+    dump_files: list[Path] = typer.Option(
+        [],
+        "--dump-file",
+        help="Chat history dump JSON file to include. Repeat to add multiple dumps.",
+    ),
+    think_time: bool = typer.Option(
+        False,
+        "--think-time",
+        help="Include synthetic think-time gaps between steps when the gap exceeds 5 ms",
+    ),
+) -> None:
+    """Export one or more conversation histories as a standalone HTML Gantt report."""
+    if not conversation_ids and not dump_files:
+        print_error("Provide at least one conversation ID or --dump-file input.")
+        raise typer.Exit(1)
+
+    client = _get_client() if conversation_ids else None
+
+    async def _run() -> list[dict[str, Any]]:
+        conversations: list[dict[str, Any]] = []
+        try:
+            if client is not None:
+                for conversation_id in conversation_ids:
+                    conversations.append(
+                        {
+                            "id": conversation_id,
+                            "label": conversation_id,
+                            "source": "conversation",
+                            "data": await get_all_messages(client, conversation_id),
+                        }
+                    )
+            for dump_file in dump_files:
+                conversations.append(
+                    {
+                        "id": dump_file.stem,
+                        "label": dump_file.stem,
+                        "source": str(dump_file),
+                        "data": load_history_dump(dump_file),
+                    }
+                )
+            return conversations
+        finally:
+            if client is not None:
+                await client.close()
+
+    try:
+        conversations = asyncio.run(_run())
+        payload = build_html_report_payload(conversations, include_think_time=think_time)
+        write_html_report(output_file, payload)
+    except (DremioAPIError, OSError, ValueError, json.JSONDecodeError) as exc:
+        print_error(f"Unable to export chat HTML report: {exc}")
+        raise typer.Exit(1)
+
+    Console().print(f"[green]Wrote chat report:[/] {output_file}")
 
 
 @app.command("delete")
