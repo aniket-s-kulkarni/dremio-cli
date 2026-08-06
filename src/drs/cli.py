@@ -172,7 +172,9 @@ def search_command(
     term: str = typer.Argument(help="Search term (matches table names, view names, source names)"),
     filter_: str | None = typer.Option(None, "--filter", help="CEL filter expression to refine search results"),
     max_results: int | None = typer.Option(None, "--max-results", min=1, help="Maximum results to return per page"),
-    next_page_token: str | None = typer.Option(None, "--next-page-token", help="Pagination token from a prior search response"),
+    next_page_token: str | None = typer.Option(
+        None, "--next-page-token", help="Pagination token from a prior search response"
+    ),
     fmt: str = typer.Option("json", "--output", "-o", help="Output format: json, csv, pretty"),
 ) -> None:
     """Full-text search across all catalog entities (tables, views, sources)."""
