@@ -140,6 +140,12 @@ dremio query run "SELECT * FROM myspace.orders LIMIT 5" --output pretty
 # Search the catalog for anything matching "revenue"
 dremio search "revenue"
 
+# Search only jobs and limit the first page size
+dremio search "revenue" --filter 'category in ["JOB"]' --max-results 20
+
+# Fetch the next page using the nextPageToken from a prior response
+dremio search "revenue" --next-page-token 'eyJwYWdlVG9rZW4iOiJ...'
+
 # Create a space, then a folder inside it
 dremio folder create "Analytics"
 dremio folder create Analytics.reports

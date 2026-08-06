@@ -200,10 +200,20 @@ class DremioClient:
         joined = "/".join(path_parts)
         return await self._get(self._v3(f"/catalog/by-path/{joined}"))
 
-    async def search(self, query: str, filter_: str | None = None) -> dict:
+    async def search(
+        self,
+        query: str,
+        filter_: str | None = None,
+        max_results: int | None = None,
+        next_page_token: str | None = None,
+    ) -> dict:
         body: dict[str, Any] = {"query": query}
         if filter_:
             body["filter"] = filter_
+        if max_results is not None:
+            body["maxResults"] = max_results
+        if next_page_token:
+            body["pageToken"] = next_page_token
         return await self._post(self._v0("/search"), json=body)
 
     async def create_catalog_entity(self, body: dict) -> dict:

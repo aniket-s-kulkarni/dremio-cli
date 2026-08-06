@@ -212,6 +212,24 @@ COMMAND_SCHEMAS: dict[str, dict] = {
         "endpoints": ["POST /v0/projects/{pid}/search"],
         "parameters": [
             {"name": "term", "type": "string", "required": True, "positional": True, "description": "Search term"},
+            {
+                "name": "filter",
+                "type": "string",
+                "required": False,
+                "description": "Optional CEL filter expression to refine search results",
+            },
+            {
+                "name": "max_results",
+                "type": "integer",
+                "required": False,
+                "description": "Maximum number of results to return per page",
+            },
+            {
+                "name": "next_page_token",
+                "type": "string",
+                "required": False,
+                "description": "Pagination token returned by a previous search response",
+            },
             {"name": "output", "type": "enum", "required": False, "default": "json", "enum": ["json", "csv", "pretty"]},
         ],
     },
