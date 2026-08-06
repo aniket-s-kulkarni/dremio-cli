@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 from unittest.mock import AsyncMock
+from unittest.mock import MagicMock
 
 from typer.testing import CliRunner
 
@@ -217,3 +218,35 @@ def test_chat_html_command_accepts_positional_conversation_ids(monkeypatch, tmp_
     assert '"conversationCount": 2' in report
     assert '"id": "conv-1"' in report
     assert '"id": "conv-2"' in report
+
+
+def test_search_command_passes_filter_and_max_results(monkeypatch) -> None:
+    search_mock = AsyncMock(return_value={"results": []})
+    close_mock = AsyncMock()
+    client = MagicMock()
+    client.search = search_mock
+    client.close = close_mock
+
+    monkeypatch.setattr("drs.cli.get_client", lambda: client)
+
+    result = runner.invoke(app, ["search", "revenue", "--filter", 'category in ["JOB"]', "--max-results", "20"])
+
+    assert result.exit_code == 0
+    search_mock.assert_awaited_once_with("revenue", filter_='category in ["JOB"]', max_results=20)
+    close_mock.assert_awaited_once()
+
+
+def test_search_command_passes_next_page_token(monkeypatch) -> None:
+    search_mock = AsyncMock(return_value={"results": []})
+    close_mock = AsyncMock()
+    client = MagicMock()
+    client.search = search_mock
+    client.close = close_mock
+
+    monkeypatch.setattr("drs.cli.get_client", lambda: client)
+
+    result = runner.invoke(app, ["search", "revenue", "--next-page-token", "token-123"])
+
+    assert result.exit_code == 0
+    search_mock.assert_awaited_once_with("revenue", filter_=None, max_results=None, next_page_token="token-123")
+    close_mock.assert_awaited_once()

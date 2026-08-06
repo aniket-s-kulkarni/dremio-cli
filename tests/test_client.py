@@ -103,6 +103,47 @@ class TestClientHeaders:
         assert client._client.headers["content-type"] == "application/json"
 
 
+class TestSearch:
+    @pytest.mark.asyncio
+    async def test_search_includes_optional_filter_and_max_results(self, client: DremioClient) -> None:
+        captured: dict = {}
+
+        async def _capture(request: httpx.Request) -> httpx.Response:
+            import json
+
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"results": []})
+
+        client._client = httpx.AsyncClient(transport=httpx.MockTransport(_capture))
+
+        await client.search("revenue", filter_='category in ["JOB"]', max_results=20)
+
+        assert captured["body"] == {
+            "query": "revenue",
+            "filter": 'category in ["JOB"]',
+            "maxResults": 20,
+        }
+
+    @pytest.mark.asyncio
+    async def test_search_includes_page_token(self, client: DremioClient) -> None:
+        captured: dict = {}
+
+        async def _capture(request: httpx.Request) -> httpx.Response:
+            import json
+
+            captured["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"results": []})
+
+        client._client = httpx.AsyncClient(transport=httpx.MockTransport(_capture))
+
+        await client.search("revenue", next_page_token="token-123")
+
+        assert captured["body"] == {
+            "query": "revenue",
+            "pageToken": "token-123",
+        }
+
+
 class TestSQLBreadcrumb:
     @pytest.mark.asyncio
     async def test_submit_sql_prepends_breadcrumb(self, client: DremioClient) -> None:
