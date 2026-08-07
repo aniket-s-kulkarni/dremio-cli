@@ -328,9 +328,7 @@ class DremioClient:
         params = f"?taskId={task_id}" if task_id else ""
         return await self._put(f"{url}{params}", json=body)
 
-    async def delete_semantic_layer_entity(
-        self, entity_id: str, entity_type: str, task_id: str | None = None
-    ) -> dict:
+    async def delete_semantic_layer_entity(self, entity_id: str, entity_type: str, task_id: str | None = None) -> dict:
         params: dict[str, Any] = {"EntityType": entity_type}
         if task_id:
             params["taskId"] = task_id

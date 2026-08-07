@@ -18,9 +18,9 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from pathlib import Path
 from typing import Annotated, Any
-import sys
 
 import httpx
 import typer
@@ -172,13 +172,10 @@ def cli_run(
         if sql is not None:
             error("Cannot specify both a SQL argument and --file.")
             raise typer.Exit(1)
-        if file == '-':
-            sql = sys.stdin.read().strip()
-        else:
-            sql = file.read_text().strip()
+        sql = sys.stdin.read().strip() if file == "-" else file.read_text().strip()
     elif sql is not None:
         sql = sql.strip()
-        if sql == '-':
+        if sql == "-":
             sql = sys.stdin.read().strip()
 
     if not sql:
