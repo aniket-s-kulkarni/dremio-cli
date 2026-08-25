@@ -166,6 +166,7 @@ async def test_401_triggers_token_refresh(config) -> None:
         refresh_token="my-refresh-token",
         client_id="my-client-id",
     )
+    config.auth_source = "oauth"
     client = DremioClient(config)
 
     unauthorized = httpx.Response(401, request=httpx.Request("GET", "https://example.com/test"))
@@ -193,6 +194,7 @@ async def test_401_triggers_token_refresh(config) -> None:
         access_token="new-access-token",
         refresh_token="new-refresh-token",
         client_id="my-client-id",
+        config_path=config.config_path,
     )
     # Verify the client header was updated
     assert client._client.headers["Authorization"] == "Bearer new-access-token"
@@ -200,7 +202,7 @@ async def test_401_triggers_token_refresh(config) -> None:
 
 @pytest.mark.asyncio
 async def test_401_no_refresh_without_oauth_config(config) -> None:
-    """401 without OAuth config should NOT attempt refresh — just raise."""
+    """401 without OAuth auth_source should NOT attempt refresh — just raise."""
     client = DremioClient(config)
 
     unauthorized = httpx.Response(
@@ -225,6 +227,7 @@ async def test_401_refresh_only_once(config) -> None:
         refresh_token="my-refresh-token",
         client_id="my-client-id",
     )
+    config.auth_source = "oauth"
     client = DremioClient(config)
     # Simulate: first refresh succeeds but token is still invalid (401 again)
     client._refreshed = True  # already refreshed once
@@ -250,6 +253,7 @@ async def test_401_refresh_fails_raises_original(config) -> None:
         refresh_token="my-refresh-token",
         client_id="my-client-id",
     )
+    config.auth_source = "oauth"
     client = DremioClient(config)
 
     unauthorized = httpx.Response(
@@ -267,3 +271,65 @@ async def test_401_refresh_fails_raises_original(config) -> None:
 
     # Only one request attempt — refresh failed so no retry
     assert client._client.request.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_401_no_refresh_when_env_token_overrides_oauth(config) -> None:
+    """When DREMIO_TOKEN overrides OAuth, 401 should NOT try OAuth refresh."""
+    from drs.auth import OAuthConfig
+
+    config.oauth = OAuthConfig(
+        access_token="oauth-token",
+        refresh_token="my-refresh-token",
+        client_id="my-client-id",
+    )
+    config.auth_source = "env"  # env var won the priority chain
+    client = DremioClient(config)
+
+    unauthorized = httpx.Response(
+        401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test")
+    )
+    client._client.request = AsyncMock(return_value=unauthorized)
+
+    with pytest.raises(httpx.HTTPStatusError):
+        await client._get("https://example.com/test")
+
+    assert client._client.request.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_401_refresh_then_transient_retry(config) -> None:
+    """After refresh, a 503 on the retry should still enter the transient-retry loop."""
+    from drs.auth import OAuthConfig
+
+    config.oauth = OAuthConfig(
+        access_token="expired-token",
+        refresh_token="my-refresh-token",
+        client_id="my-client-id",
+    )
+    config.auth_source = "oauth"
+    client = DremioClient(config)
+
+    unauthorized = httpx.Response(401, request=httpx.Request("GET", "https://example.com/test"))
+    transient = httpx.Response(503, request=httpx.Request("GET", "https://example.com/test"))
+    ok_response = httpx.Response(200, json={"ok": True}, request=httpx.Request("GET", "https://example.com/test"))
+
+    # 401 → refresh → 503 (transient) → retry → 200
+    client._client.request = AsyncMock(side_effect=[unauthorized, transient, ok_response])
+
+    from drs.oauth import OAuthTokens
+
+    mock_tokens = OAuthTokens(access_token="new-access-token", refresh_token="new-refresh-token")
+
+    with (
+        patch("drs.oauth.discover_oauth_metadata") as mock_discover,
+        patch("drs.oauth.do_token_refresh", return_value=mock_tokens),
+        patch("drs.client.save_oauth_tokens"),
+        patch("drs.client.asyncio.sleep", new_callable=AsyncMock),
+    ):
+        mock_discover.return_value = type("Meta", (), {"token_endpoint": "https://login.dremio.cloud/oauth/token"})()
+        result = await client._get("https://example.com/test")
+
+    assert result == {"ok": True}
+    # 3 requests: original 401, post-refresh 503, transient-retry 200
+    assert client._client.request.call_count == 3

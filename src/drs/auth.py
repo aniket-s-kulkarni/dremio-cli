@@ -44,6 +44,8 @@ class DrsConfig(BaseModel):
     pat: str
     project_id: str
     oauth: OAuthConfig | None = None
+    auth_source: str = "file"  # "oauth" | "file" | "env" | "cli"
+    config_path: Path = DEFAULT_CONFIG_PATH
 
 
 def load_config(
@@ -82,11 +84,14 @@ def load_config(
                 refresh_token=raw["oauth"].get("refresh_token"),
                 client_id=raw["oauth"].get("client_id"),
             )
-            # Use OAuth access_token as the PAT if no explicit PAT is set
-            if oauth_config.access_token and "pat" not in file_values:
-                file_values["pat"] = oauth_config.access_token
 
-    # -- Env vars (override file) --
+    # -- Determine auth source: OAuth access_token overrides file PAT --
+    auth_source = "file"
+    if oauth_config and oauth_config.access_token:
+        file_values["pat"] = oauth_config.access_token
+        auth_source = "oauth"
+
+    # -- Env vars (override file + oauth) --
     env_values: dict[str, Any] = {}
     if v := os.environ.get("DREMIO_URI"):
         env_values["uri"] = v
@@ -98,6 +103,8 @@ def load_config(
     # -- Merge: defaults < file < env --
     merged: dict[str, Any] = {"uri": DEFAULT_URI}
     merged.update(file_values)
+    if "pat" in env_values:
+        auth_source = "env"
     merged.update(env_values)
 
     # -- CLI args (highest priority, override everything) --
@@ -107,8 +114,9 @@ def load_config(
         merged["project_id"] = cli_project_id
     if cli_token:
         merged["pat"] = cli_token
+        auth_source = "cli"
 
-    config = DrsConfig(**merged)
+    config = DrsConfig(**merged, auth_source=auth_source, config_path=path)
     config.oauth = oauth_config
     return config
 

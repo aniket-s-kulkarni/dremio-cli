@@ -67,9 +67,15 @@ class DremioClient:
         """Attempt to refresh the OAuth access token synchronously.
 
         Returns True if the token was refreshed and the client headers updated.
+        Only activates when the active credential is the OAuth access token
+        (auth_source == "oauth"), not when env vars or CLI --token are in use.
         """
         if self._refreshed:
             return False  # already tried once this session
+
+        # Only refresh when OAuth is the active credential source
+        if self.config.auth_source != "oauth":
+            return False
 
         oauth = self.config.oauth
         if not oauth or not oauth.refresh_token or not oauth.client_id:
@@ -94,11 +100,12 @@ class DremioClient:
         if result.refresh_token:
             oauth.refresh_token = result.refresh_token
 
-        # Persist to config file
+        # Persist to the config file that was actually loaded
         save_oauth_tokens(
             access_token=result.access_token,
             refresh_token=result.refresh_token or oauth.refresh_token,
             client_id=oauth.client_id,
+            config_path=self.config.config_path,
         )
 
         # Update httpx client headers
@@ -136,7 +143,9 @@ class DremioClient:
                 if resp.status_code == 401 and self._try_refresh_token():
                     logger.info("Retrying %s %s after token refresh", method, url)
                     resp = await self._client.request(method, url, **kwargs)
-                    return resp
+                    # Fall through to retryable-status handling below so a
+                    # transient error (429/503) on the refreshed request is
+                    # still retried instead of returned immediately.
 
                 if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
                     delay = _RETRY_BACKOFF[attempt]
