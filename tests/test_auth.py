@@ -162,3 +162,94 @@ def test_cli_args_override_env(tmp_path: Path) -> None:
     assert config.pat == "cli-token"
     assert config.project_id == "cli-project"
     assert config.uri == "https://api.eu.dremio.cloud"
+
+
+def test_oauth_overrides_file_pat(tmp_path: Path) -> None:
+    """OAuth access_token should override the file PAT field."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        yaml.dump(
+            {
+                "pat": "old-file-pat",
+                "project_id": "proj",
+                "oauth": {
+                    "access_token": "oauth-access-token",
+                    "refresh_token": "oauth-refresh-token",
+                    "client_id": "my-client-id",
+                },
+            }
+        )
+    )
+
+    with patch.dict(os.environ, {}, clear=False):
+        for k in ["DREMIO_TOKEN", "DREMIO_PAT", "DREMIO_PROJECT_ID", "DREMIO_URI"]:
+            os.environ.pop(k, None)
+        config = load_config(config_file)
+
+    assert config.pat == "oauth-access-token"
+    assert config.auth_source == "oauth"
+
+
+def test_env_token_overrides_oauth(tmp_path: Path) -> None:
+    """DREMIO_TOKEN env var should override OAuth access_token."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        yaml.dump(
+            {
+                "project_id": "proj",
+                "oauth": {
+                    "access_token": "oauth-access-token",
+                    "refresh_token": "oauth-refresh-token",
+                    "client_id": "my-client-id",
+                },
+            }
+        )
+    )
+
+    with patch.dict(os.environ, {"DREMIO_TOKEN": "env-token"}, clear=False):
+        os.environ.pop("DREMIO_PAT", None)
+        os.environ.pop("DREMIO_PROJECT_ID", None)
+        os.environ.pop("DREMIO_URI", None)
+        config = load_config(config_file)
+
+    assert config.pat == "env-token"
+    assert config.auth_source == "env"
+
+
+def test_cli_token_auth_source(tmp_path: Path) -> None:
+    """--token CLI arg should set auth_source to 'cli'."""
+    config_file = tmp_path / "config.yaml"
+    config_file.write_text(
+        yaml.dump(
+            {
+                "project_id": "proj",
+                "oauth": {
+                    "access_token": "oauth-access-token",
+                    "refresh_token": "oauth-refresh-token",
+                    "client_id": "my-client-id",
+                },
+            }
+        )
+    )
+
+    with patch.dict(os.environ, {}, clear=False):
+        for k in ["DREMIO_TOKEN", "DREMIO_PAT", "DREMIO_PROJECT_ID", "DREMIO_URI"]:
+            os.environ.pop(k, None)
+        config = load_config(config_file, cli_token="cli-token")
+
+    assert config.pat == "cli-token"
+    assert config.auth_source == "cli"
+
+
+def test_config_path_preserved(tmp_path: Path) -> None:
+    """The effective config path should be stored on DrsConfig."""
+    config_file = tmp_path / "custom" / "config.yaml"
+    config_file.parent.mkdir(parents=True)
+    config_file.write_text(yaml.dump({"pat": "tok", "project_id": "proj"}))
+
+    with patch.dict(os.environ, {}, clear=False):
+        for k in ["DREMIO_TOKEN", "DREMIO_PAT", "DREMIO_PROJECT_ID", "DREMIO_URI"]:
+            os.environ.pop(k, None)
+        config = load_config(config_file)
+
+    assert config.config_path == config_file

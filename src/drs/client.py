@@ -24,7 +24,7 @@ from typing import Any
 import httpx
 
 from drs import __version__
-from drs.auth import DrsConfig
+from drs.auth import DrsConfig, save_oauth_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,9 @@ class DremioClient:
 
     Transient failures (timeouts, 429, 502, 503, 504) are retried up to 3
     times with exponential backoff (1s, 2s, 4s).
+
+    401 responses trigger an automatic token refresh using the stored OAuth
+    refresh token, then retry the request once with the new access token.
     """
 
     def __init__(self, config: DrsConfig) -> None:
@@ -53,9 +56,63 @@ class DremioClient:
             },
             timeout=120.0,
         )
+        self._refreshed = False  # guard against infinite refresh loops
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    # -- OAuth 401 auto-refresh --
+
+    def _try_refresh_token(self) -> bool:
+        """Attempt to refresh the OAuth access token synchronously.
+
+        Returns True if the token was refreshed and the client headers updated.
+        Only activates when the active credential is the OAuth access token
+        (auth_source == "oauth"), not when env vars or CLI --token are in use.
+        """
+        if self._refreshed:
+            return False  # already tried once this session
+
+        # Only refresh when OAuth is the active credential source
+        if self.config.auth_source != "oauth":
+            return False
+
+        oauth = self.config.oauth
+        if not oauth or not oauth.refresh_token or not oauth.client_id:
+            return False
+
+        from drs.oauth import discover_oauth_metadata, do_token_refresh
+
+        try:
+            metadata = discover_oauth_metadata(self.config.uri)
+            result = do_token_refresh(metadata.token_endpoint, oauth.client_id, oauth.refresh_token)
+        except Exception as exc:
+            logger.warning("OAuth token refresh failed: %s", exc)
+            return False
+
+        if result is None:
+            logger.warning("OAuth token refresh returned no tokens")
+            return False
+
+        # Update in-memory state
+        self.config.pat = result.access_token
+        oauth.access_token = result.access_token
+        if result.refresh_token:
+            oauth.refresh_token = result.refresh_token
+
+        # Persist to the config file that was actually loaded
+        save_oauth_tokens(
+            access_token=result.access_token,
+            refresh_token=result.refresh_token or oauth.refresh_token,
+            client_id=oauth.client_id,
+            config_path=self.config.config_path,
+        )
+
+        # Update httpx client headers
+        self._client.headers["Authorization"] = f"Bearer {result.access_token}"
+        self._refreshed = True
+        logger.info("OAuth token refreshed successfully")
+        return True
 
     # -- URL builders --
 
@@ -73,11 +130,23 @@ class DremioClient:
     # -- HTTP helpers with retry --
 
     async def _request_with_retry(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        """Execute an HTTP request with retry on transient errors."""
+        """Execute an HTTP request with retry on transient errors.
+
+        Also handles 401 by attempting an OAuth token refresh once.
+        """
         last_exc: Exception | None = None
         for attempt in range(_MAX_RETRIES):
             try:
                 resp = await self._client.request(method, url, **kwargs)
+
+                # 401 — attempt token refresh and retry once
+                if resp.status_code == 401 and self._try_refresh_token():
+                    logger.info("Retrying %s %s after token refresh", method, url)
+                    resp = await self._client.request(method, url, **kwargs)
+                    # Fall through to retryable-status handling below so a
+                    # transient error (429/503) on the refreshed request is
+                    # still retried instead of returned immediately.
+
                 if resp.status_code in _RETRYABLE_STATUS_CODES and attempt < _MAX_RETRIES - 1:
                     delay = _RETRY_BACKOFF[attempt]
                     logger.warning(
