@@ -30,6 +30,7 @@ from drs import __version__
 from drs.auth import DrsConfig, load_config
 from drs.client import DremioClient
 from drs.commands import (
+    auth,
     chat,
     engine,
     folder,
@@ -57,6 +58,7 @@ app = typer.Typer(
 )
 
 # Register command groups
+app.add_typer(auth.app, name="auth")
 app.add_typer(query.app, name="query")
 app.add_typer(folder.app, name="folder")
 app.add_typer(schema.app, name="schema")
