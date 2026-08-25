@@ -203,7 +203,9 @@ async def test_401_no_refresh_without_oauth_config(config) -> None:
     """401 without OAuth config should NOT attempt refresh — just raise."""
     client = DremioClient(config)
 
-    unauthorized = httpx.Response(401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test"))
+    unauthorized = httpx.Response(
+        401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test")
+    )
     client._client.request = AsyncMock(return_value=unauthorized)
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -227,7 +229,9 @@ async def test_401_refresh_only_once(config) -> None:
     # Simulate: first refresh succeeds but token is still invalid (401 again)
     client._refreshed = True  # already refreshed once
 
-    unauthorized = httpx.Response(401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test"))
+    unauthorized = httpx.Response(
+        401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test")
+    )
     client._client.request = AsyncMock(return_value=unauthorized)
 
     with pytest.raises(httpx.HTTPStatusError):
@@ -248,7 +252,9 @@ async def test_401_refresh_fails_raises_original(config) -> None:
     )
     client = DremioClient(config)
 
-    unauthorized = httpx.Response(401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test"))
+    unauthorized = httpx.Response(
+        401, json={"error": "unauthorized"}, request=httpx.Request("GET", "https://example.com/test")
+    )
     client._client.request = AsyncMock(return_value=unauthorized)
 
     with (

@@ -156,8 +156,7 @@ class _OAuthCallbackHandler(BaseHTTPRequestHandler):
         if "code" in params:
             _OAuthCallbackHandler.auth_code = params["code"][0]
             self._respond_html(
-                "<h2>✓ Authentication successful!</h2>"
-                "<p>You can close this tab and return to the terminal.</p>"
+                "<h2>✓ Authentication successful!</h2><p>You can close this tab and return to the terminal.</p>"
             )
         elif "error" in params:
             _OAuthCallbackHandler.error = params.get("error_description", params["error"])[0]

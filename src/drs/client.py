@@ -79,9 +79,7 @@ class DremioClient:
 
         try:
             metadata = discover_oauth_metadata(self.config.uri)
-            result = do_token_refresh(
-                metadata.token_endpoint, oauth.client_id, oauth.refresh_token
-            )
+            result = do_token_refresh(metadata.token_endpoint, oauth.client_id, oauth.refresh_token)
         except Exception as exc:
             logger.warning("OAuth token refresh failed: %s", exc)
             return False

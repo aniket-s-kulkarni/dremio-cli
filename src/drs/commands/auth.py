@@ -52,12 +52,8 @@ err_console = Console(stderr=True)
 @app.command("login")
 def login_command(
     ctx: typer.Context,
-    client_id: str = typer.Option(
-        DEFAULT_CLIENT_ID, "--client-id", help="OAuth client ID."
-    ),
-    port: int = typer.Option(
-        DEFAULT_REDIRECT_PORT, "--port", help="Local port for OAuth redirect listener."
-    ),
+    client_id: str = typer.Option(DEFAULT_CLIENT_ID, "--client-id", help="OAuth client ID."),
+    port: int = typer.Option(DEFAULT_REDIRECT_PORT, "--port", help="Local port for OAuth redirect listener."),
     uri: str | None = typer.Option(
         None,
         "--uri",
@@ -71,9 +67,7 @@ def login_command(
     will use this token automatically and refresh it when expired.
     """
     if not sys.stdin.isatty():
-        err_console.print(
-            "[bold red]dremio auth login[/bold red] requires an interactive terminal."
-        )
+        err_console.print("[bold red]dremio auth login[/bold red] requires an interactive terminal.")
         raise typer.Exit(1)
 
     # Determine config path and API URI
@@ -188,9 +182,7 @@ def status_command(
 @app.command("refresh")
 def refresh_command(
     ctx: typer.Context,
-    uri: str | None = typer.Option(
-        None, "--uri", help="Dremio API base URI (overrides config)."
-    ),
+    uri: str | None = typer.Option(None, "--uri", help="Dremio API base URI (overrides config)."),
 ) -> None:
     """Refresh the OAuth access token using the stored refresh token.
 
