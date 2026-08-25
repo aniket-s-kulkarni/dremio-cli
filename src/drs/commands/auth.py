@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import sys
+from datetime import UTC
 from pathlib import Path
 
 import typer
@@ -112,7 +113,7 @@ def login_command(
         config_path=config_path,
     )
 
-    console.print(f"\n[green]✓ Logged in successfully![/green]")
+    console.print("\n[green]✓ Logged in successfully![/green]")
     console.print(f"  Tokens saved to [cyan]{config_path}[/cyan]")
     if tokens.refresh_token:
         console.print("  [dim]Refresh token stored — CLI will auto-refresh on expiry.[/dim]")
@@ -298,7 +299,7 @@ def _decode_token_expiry(token: str | None) -> str | None:
     try:
         import base64
         import json
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         # Decode JWT payload (second segment)
         parts = token.split(".")
@@ -312,8 +313,8 @@ def _decode_token_expiry(token: str | None) -> str | None:
         decoded = json.loads(base64.urlsafe_b64decode(payload))
         exp = decoded.get("exp")
         if exp:
-            exp_dt = datetime.fromtimestamp(exp, tz=timezone.utc)
-            now = datetime.now(tz=timezone.utc)
+            exp_dt = datetime.fromtimestamp(exp, tz=UTC)
+            now = datetime.now(tz=UTC)
             if exp_dt < now:
                 return f"[red]{exp_dt.isoformat()} (EXPIRED)[/red]"
             delta = exp_dt - now

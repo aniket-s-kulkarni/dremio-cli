@@ -17,7 +17,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import hashlib
 import logging
 import secrets
@@ -102,10 +101,7 @@ def discover_oauth_metadata(api_uri: str) -> OAuthMetadata:
     # Default: derive from the API URI hostname
     # api.X.dremio.cloud -> login.X.dremio.cloud
     hostname = parsed.hostname or ""
-    if hostname.startswith("api."):
-        login_host = "login." + hostname[4:]
-    else:
-        login_host = hostname
+    login_host = "login." + hostname[4:] if hostname.startswith("api.") else hostname
 
     return OAuthMetadata(
         authorization_endpoint=f"{parsed.scheme}://{login_host}/authorize",
@@ -151,9 +147,9 @@ class _OAuthCallbackHandler(BaseHTTPRequestHandler):
 
     auth_code: str | None = None
     error: str | None = None
-    server_instance: "_OAuthCallbackServer | None" = None
+    server_instance: _OAuthCallbackServer | None = None
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         parsed = urlparse(self.path)
         params = parse_qs(parsed.query)
 
@@ -183,7 +179,7 @@ class _OAuthCallbackHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html.encode())
 
-    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: Any) -> None:
         # Suppress default HTTP server access logs
         logger.debug(format, *args)
 
